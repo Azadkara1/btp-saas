@@ -1,0 +1,616 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --ink:#16202e; --slate:#475569; --slate-2:#64748b; --line:#dde4ec;
+    --paper:#eef2f7; --card:#ffffff; --blue:#2563eb; --amber:#d97706;
+    --amber-soft:#fdf2e2; --green:#15803d; --green-soft:#e9f5ec; --red:#dc2626;
+    --slate-soft:#eef1f5;
+    --shadow:0 1px 2px rgba(22,32,46,.06), 0 4px 14px rgba(22,32,46,.05);
+    --display:'Space Grotesk',system-ui,sans-serif;
+    --body:'Inter',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--body); color:var(--ink); background:var(--paper);
+    background-image:
+      linear-gradient(rgba(71,85,105,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(71,85,105,.05) 1px, transparent 1px);
+    background-size:26px 26px;
+    -webkit-font-smoothing:antialiased; padding:0; line-height:1.45;
+  }
+  .wrap{max-width:1280px; margin:0 auto; padding:22px 18px 56px}
+
+  /* Header */
+  header.top{display:flex; flex-wrap:wrap; gap:18px 24px; align-items:flex-end; justify-content:space-between; margin-bottom:18px}
+  .brand{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
+  .brand h1{font-family:var(--display); font-weight:700; font-size:26px; letter-spacing:-.02em; margin:0}
+  .brand .src{font-family:var(--mono); font-size:11px; color:var(--slate-2); background:#fff; border:1px solid var(--line); padding:3px 8px; border-radius:999px}
+  .brand p{margin:4px 0 0; color:var(--slate); font-size:13.5px; width:100%}
+
+  .progress-card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px 16px; box-shadow:var(--shadow); min-width:240px}
+  .progress-card .pct{font-family:var(--display); font-weight:700; font-size:22px; letter-spacing:-.01em}
+  .progress-card .lbl{font-size:12px; color:var(--slate-2); margin-bottom:8px}
+  .bar{height:8px; border-radius:99px; background:var(--slate-soft); overflow:hidden}
+  .bar > i{display:block; height:100%; background:linear-gradient(90deg,var(--blue),var(--green)); border-radius:99px; transition:width .4s ease}
+
+  /* Toolbar */
+  .toolbar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:6px 0 16px}
+  .filters{display:flex; gap:6px; flex-wrap:wrap}
+  .chip{font-family:var(--mono); font-size:12px; border:1px solid var(--line); background:#fff; color:var(--slate); padding:6px 11px; border-radius:99px; cursor:pointer; transition:.15s}
+  .chip:hover{border-color:var(--slate-2)}
+  .chip.active{background:var(--ink); color:#fff; border-color:var(--ink)}
+  .search{flex:1; min-width:160px; max-width:280px; border:1px solid var(--line); background:#fff; border-radius:99px; padding:8px 13px; font-family:var(--body); font-size:13.5px; color:var(--ink)}
+  .search::placeholder{color:#9aa6b4}
+  .spacer{flex:1}
+  .btn{font-family:var(--body); font-weight:600; font-size:13px; border-radius:10px; padding:9px 14px; cursor:pointer; border:1px solid var(--line); background:#fff; color:var(--ink); transition:.15s; white-space:nowrap}
+  .btn:hover{border-color:var(--slate-2)}
+  .btn.primary{background:var(--ink); color:#fff; border-color:var(--ink)}
+  .btn.primary:hover{background:#0e1722}
+  .btn.ghost{background:transparent}
+
+  /* Board */
+  .board{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start}
+  .col{background:rgba(255,255,255,.55); border:1px solid var(--line); border-radius:16px; padding:12px; backdrop-filter:blur(2px); transition:.15s}
+  .col.drag-over{border-color:var(--blue); background:#eef3fe}
+  .col-head{display:flex; align-items:center; gap:9px; padding:4px 6px 12px}
+  .col-head .dot{width:9px; height:9px; border-radius:99px}
+  .col-head h2{font-family:var(--display); font-weight:600; font-size:15px; margin:0; letter-spacing:-.01em}
+  .col-head .count{font-family:var(--mono); font-size:12px; color:var(--slate-2); background:#fff; border:1px solid var(--line); border-radius:99px; padding:2px 9px; margin-left:auto}
+  .col-top-rule{height:3px; border-radius:99px; margin:0 6px 12px}
+
+  .cards{display:flex; flex-direction:column; gap:10px; min-height:24px}
+  .card{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--blue); border-radius:12px; padding:12px 13px 10px; box-shadow:var(--shadow); cursor:grab}
+  .card:active{cursor:grabbing}
+  .card.dragging{opacity:.45}
+  .card .title{font-weight:600; font-size:14px; line-height:1.35; letter-spacing:-.005em}
+  .card.done .title{color:var(--slate); text-decoration:line-through; text-decoration-color:#c2ccd8}
+  .card .desc{font-size:12.5px; color:var(--slate); margin-top:5px}
+  .card .meta{display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; align-items:center}
+  .tag{font-family:var(--mono); font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:6px; letter-spacing:.01em}
+  .etape{font-family:var(--mono); font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:6px; color:#fff}
+  .card .foot{display:flex; align-items:center; gap:4px; margin-top:10px; padding-top:9px; border-top:1px solid #f0f3f7}
+  .ico{border:1px solid var(--line); background:#fff; border-radius:8px; width:30px; height:28px; display:grid; place-items:center; cursor:pointer; color:var(--slate); font-size:14px; transition:.12s; padding:0}
+  .ico:hover{border-color:var(--slate-2); color:var(--ink)}
+  .ico:disabled{opacity:.3; cursor:default}
+  .foot .edit{margin-left:auto; font-family:var(--body); font-size:12px; font-weight:600; color:var(--blue); background:none; border:none; cursor:pointer; padding:4px 6px}
+  .foot .edit:hover{text-decoration:underline}
+  .empty{font-size:12.5px; color:var(--slate-2); text-align:center; padding:18px 8px; border:1px dashed var(--line); border-radius:10px}
+
+  /* Modal */
+  .overlay{position:fixed; inset:0; background:rgba(22,32,46,.45); display:none; align-items:center; justify-content:center; padding:18px; z-index:50}
+  .overlay.show{display:flex}
+  .modal{background:#fff; border-radius:18px; width:100%; max-width:480px; box-shadow:0 24px 60px rgba(22,32,46,.3); max-height:92vh; overflow:auto}
+  .modal h3{font-family:var(--display); font-size:18px; margin:0; padding:18px 20px; border-bottom:1px solid var(--line); letter-spacing:-.01em}
+  .modal .body{padding:18px 20px; display:flex; flex-direction:column; gap:14px}
+  .field label{display:block; font-size:12px; font-weight:600; color:var(--slate); margin-bottom:5px}
+  .field input[type=text], .field textarea, .field select{width:100%; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-family:var(--body); font-size:14px; color:var(--ink); background:#fff}
+  .field textarea{resize:vertical; min-height:70px}
+  .two{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .tagpick{display:flex; flex-wrap:wrap; gap:7px}
+  .tagpick .opt{font-family:var(--mono); font-size:11.5px; font-weight:600; border:1px solid var(--line); border-radius:8px; padding:6px 10px; cursor:pointer; color:var(--slate); user-select:none; transition:.12s}
+  .tagpick .opt.on{color:#fff; border-color:transparent}
+  .modal .actions{display:flex; gap:10px; align-items:center; padding:16px 20px; border-top:1px solid var(--line)}
+  .modal .actions .del{margin-right:auto; color:var(--red); background:none; border:none; font-weight:600; font-size:13px; cursor:pointer}
+  .modal .actions .del:hover{text-decoration:underline}
+
+  /* misc */
+  .banner{display:none; background:var(--amber-soft); border:1px solid #f1d9b0; color:#8a5a14; font-size:12.5px; padding:9px 14px; border-radius:10px; margin-bottom:14px}
+  .banner.show{display:block}
+  .toast{position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--ink); color:#fff; font-size:13px; font-weight:500; padding:11px 18px; border-radius:99px; opacity:0; pointer-events:none; transition:.25s; z-index:60}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  @media (max-width:860px){
+    .board{grid-template-columns:1fr}
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Tableau de bord — DevisBTP</h1>
+      <span class="src">source · CLAUDE.md · 11 juin 2026</span>
+      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. Glisse les cartes entre colonnes ou utilise les flèches. Tout est sauvegardé automatiquement.</p>
+    </div>
+    <div class="progress-card">
+      <div class="lbl">Avancement global</div>
+      <div class="pct" id="pct">0%</div>
+      <div class="bar"><i id="barfill" style="width:0%"></i></div>
+      <div class="lbl" id="progress-detail" style="margin-top:7px"></div>
+    </div>
+  </header>
+
+  <div class="banner" id="banner">⚠️ Sauvegarde indisponible dans ce contexte — tes modifications resteront le temps de la session mais ne seront pas conservées à la fermeture.</div>
+
+  <div class="toolbar">
+    <div class="filters" id="etape-filters">
+      <button class="chip active" data-etape="all">Toutes étapes</button>
+      <button class="chip" data-etape="1">É1 · MVP</button>
+      <button class="chip" data-etape="2">É2 · Persistance</button>
+      <button class="chip" data-etape="3">É3 · Mobile &amp; Vision</button>
+    </div>
+    <input class="search" id="search" type="text" placeholder="Rechercher une tâche…">
+    <span class="spacer"></span>
+    <button class="btn" id="btn-md">Copier en Markdown</button>
+    <button class="btn ghost" id="btn-reset">Réinitialiser</button>
+    <button class="btn primary" id="btn-add">+ Nouvelle carte</button>
+  </div>
+
+  <div class="board" id="board"></div>
+</div>
+
+<!-- Modal -->
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="modal-title">Nouvelle carte</h3>
+    <div class="body">
+      <div class="field">
+        <label for="f-title">Titre</label>
+        <input type="text" id="f-title" placeholder="Ex. Ajouter la zone de signature client">
+      </div>
+      <div class="field">
+        <label for="f-desc">Description (optionnel)</label>
+        <textarea id="f-desc" placeholder="Détails, fichier concerné, contraintes…"></textarea>
+      </div>
+      <div class="two">
+        <div class="field">
+          <label for="f-col">Colonne</label>
+          <select id="f-col">
+            <option value="todo">À faire</option>
+            <option value="doing">En cours</option>
+            <option value="done">Fait</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-etape">Étape</label>
+          <select id="f-etape">
+            <option value="1">É1 · MVP</option>
+            <option value="2">É2 · Persistance</option>
+            <option value="3">É3 · Mobile &amp; Vision</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Étiquettes</label>
+        <div class="tagpick" id="f-tags"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="del" id="f-delete" style="display:none">Supprimer</button>
+      <button class="btn ghost" id="f-cancel">Annuler</button>
+      <button class="btn primary" id="f-save">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'devisbtp_board_v2';
+
+const COLUMNS = [
+  {id:'todo',  label:'À faire',  accent:'#64748b'},
+  {id:'doing', label:'En cours', accent:'#d97706'},
+  {id:'done',  label:'Fait',     accent:'#15803d'},
+];
+const ETAPES = {
+  1:{label:'É1', color:'#2563eb'},
+  2:{label:'É2', color:'#475569'},
+  3:{label:'É3', color:'#b45309'},
+};
+const TAGS = {
+  PDF:  {label:'PDF',      color:'#2563eb'},
+  Word: {label:'Word',     color:'#1d4ed8'},
+  Front:{label:'Frontend', color:'#7c3aed'},
+  Back: {label:'Backend',  color:'#475569'},
+  IA:   {label:'IA',       color:'#d97706'},
+  BDD:  {label:'BDD',      color:'#0d9488'},
+  UX:   {label:'UX',       color:'#db2777'},
+  Bug:  {label:'Bug',      color:'#dc2626'},
+};
+
+// ---- SEED — état au 11 juin 2026 ----
+const SEED = {cards:[
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Fonctionnalités de base
+  // ══════════════════════════════════════════════
+  {id:'d01', col:'done', etape:1, tags:['IA'],
+   title:'Génération de devis par texte libre → JSON',
+   desc:'Claude interprète une description de chantier et renvoie un devis structuré (lignes, totaux, mentions).'},
+  {id:'d02', col:'done', etape:1, tags:['IA'],
+   title:'Tool Use : recherche des prix du marché',
+   desc:'Complète automatiquement les tarifs manquants via price_search.py (base 2026 + coefficients régionaux).'},
+  {id:'d03', col:'done', etape:1, tags:['Front'],
+   title:'Saisie de prix personnalisés (Mes prix habituels)',
+   desc:'Avant génération : nom/prix/unité, envoyés avec priorité absolue. Badge "Votre prix" dans l\'aperçu.'},
+  {id:'d04', col:'done', etape:1, tags:['Front'],
+   title:'Édition inline de l\'aperçu',
+   desc:'Poste, Description, Lot, Qté, Unité, PU HT, TVA, Total HT (back-calcule PU). Totaux recalculés en direct.'},
+  {id:'d05', col:'done', etape:1, tags:['Front'],
+   title:'Toggle Devis / Facture',
+   desc:'Change le libellé dans l\'en-tête, le PDF et le Word.'},
+  {id:'d06', col:'done', etape:1, tags:['Front','PDF','Word'],
+   title:'Toggle Avec / Sans TVA',
+   desc:'Masque la colonne TVA, ajoute la mention art. 293 B CGI. Propagé au PDF et Word.'},
+  {id:'d07', col:'done', etape:1, tags:['Front'],
+   title:'Sélecteur de date du document',
+   desc:'Date affichée dans l\'en-tête PDF, Word et l\'aperçu.'},
+  {id:'d08', col:'done', etape:1, tags:['PDF'],
+   title:'Export PDF professionnel (fpdf2)',
+   desc:'En-tête artisan, encadrés client/chantier, tableau colonnes, totaux, mentions légales, RIB.'},
+  {id:'d09', col:'done', etape:1, tags:['Word'],
+   title:'Export Word (.docx)',
+   desc:'Même structure que le PDF. Modifiable dans Word / LibreOffice.'},
+  {id:'d10', col:'done', etape:1, tags:['Back'],
+   title:'Champs IBAN / BIC artisan',
+   desc:'Du formulaire jusqu\'au bas du PDF et du Word. Injectés post-Claude, jamais envoyés à l\'IA.'},
+  {id:'d11', col:'done', etape:1, tags:['IA'],
+   title:'Prompt IA détaillé',
+   desc:'Descriptions pro : matériaux, normes DTU, méthode de pose, 5–10 lignes minimum par prestation.'},
+  {id:'d12', col:'done', etape:1, tags:['UX'],
+   title:'Layout large max-w-5xl (1024 px)',
+   desc:'Mieux exploiter l\'espace écran sur desktop.'},
+  {id:'d13', col:'done', etape:1, tags:['Front'],
+   title:'Infos entreprise complètes + localStorage',
+   desc:'Adresse, CP, ville, tél, email, site web — persistés en localStorage, injectés en en-tête PDF/Word.'},
+  {id:'d14', col:'done', etape:1, tags:['PDF','Word'],
+   title:'Logo artisan dans PDF et Word',
+   desc:'Upload image → base64. PDF : w=38 mm côte-à-côte avec texte artisan. Word : Cm(4.5) en cell gauche.'},
+  {id:'d15', col:'done', etape:1, tags:['Back','PDF','Word'],
+   title:'Groupement par LOT',
+   desc:'Champ lot sur chaque ligne. En-têtes slate-600 + sous-totaux par groupe. PDF, Word et aperçu frontend.'},
+  {id:'d16', col:'done', etape:1, tags:['PDF'],
+   title:'Pagination PDF multi-pages propre',
+   desc:'auto_page_break=False pendant le tableau. Sauts gérés manuellement avant chaque ligne. En-tête répété.'},
+  {id:'d17', col:'done', etape:1, tags:['Front'],
+   title:'Validation saisie artisan non bloquante',
+   desc:'SIRET 14 chiffres, IBAN format FR, BIC 8/11 chars, email, code postal 5 chiffres. Bouton "Générer quand même".'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Lot T1–T9 (améliorations UI/PDF/Word)
+  // ══════════════════════════════════════════════
+  {id:'d18', col:'done', etape:1, tags:['PDF'],
+   title:'T1 · Correction chevauchement logo / nom artisan',
+   desc:'Layout côte-à-côte : logo w=38 mm à x=15, texte artisan démarre à x=57. Géré sans logo aussi.'},
+  {id:'d19', col:'done', etape:1, tags:['PDF','Word'],
+   title:'T2 · Coordonnées artisan avec libellés',
+   desc:'"Adresse : …", "Tél : …", "Mail : …", "Web : …" dans PDF et Word. Seuls les champs remplis sont affichés.'},
+  {id:'d20', col:'done', etape:1, tags:['PDF','Word'],
+   title:'T3 · Largeurs de colonnes optimisées',
+   desc:'PDF avec TVA : [36,62,16,22,16,28]. Word : [3.0,6.5,1.3,2.5,1.5,2.2] cm. Plus de place pour Description.'},
+  {id:'d21', col:'done', etape:1, tags:['PDF','Word','Front'],
+   title:'T4 · Format monétaire français',
+   desc:'"10 099,00 €" partout. PDF : _fmt_money() avec espace insécable. Frontend : toLocaleString("fr-FR").'},
+  {id:'d22', col:'done', etape:1, tags:['PDF','Word','Front'],
+   title:'T5 · Suppression du bloc notes/avertissements',
+   desc:'Le champ devis.notes (SIRET invalide, prose technique) retiré du PDF, Word et aperçu frontend.'},
+  {id:'d23', col:'done', etape:1, tags:['PDF','Word'],
+   title:'T6 · Zone de signature client',
+   desc:'2 encadrés côte-à-côte : "Bon pour accord" (Fait à / Le) + "Signature du client". PDF et Word.'},
+  {id:'d24', col:'done', etape:1, tags:['Front','PDF','Word','Back'],
+   title:'T7 · Numéro de document saisissable',
+   desc:'Champ libre (DEV-2026-001, FAC-2026-042). Modèle Pydantic + type TS + en-tête PDF/Word. Libellé selon type.'},
+  {id:'d25', col:'done', etape:1, tags:['Front'],
+   title:'T8 · Dropdown de prestations BTP',
+   desc:'9 groupes métiers (maçonnerie, charpente, plomberie, électricité, carrelage, menuiserie, peinture, isolation, démolition). Sélection append dans le textarea description.'},
+  {id:'d26', col:'done', etape:1, tags:['Front','PDF','Word','Back'],
+   title:'T9 · Remise et acompte',
+   desc:'Remise en % ou montant fixe. TVA recalculée proportionnellement (ratio ht_net/ht_brut). Aperçu : lignes remise, HT net, acompte, NET À PAYER (fond vert). PDF et Word : mêmes lignes.'},
+
+  // ══════════════════════════════════════════════
+  //  À FAIRE — Reste Étape 1
+  // ══════════════════════════════════════════════
+  {id:'t01', col:'todo', etape:1, tags:['Bug','IA'],
+   title:'Bug : prix identiques pour tous les postes',
+   desc:'L\'IA retourne parfois le même tarif pour des prestations différentes. Piste : enrichir price_search.py ou forcer la variété dans le prompt (prompts.py).'},
+  {id:'t02', col:'todo', etape:1, tags:['Back'],
+   title:'Numéro de document auto-incrémenté',
+   desc:'Actuellement saisie manuelle uniquement. Compteur persisté en localStorage ou BDD (Étape 2). Distinct de la saisie manuelle.'},
+
+  // ══════════════════════════════════════════════
+  //  À FAIRE — Étape 2
+  // ══════════════════════════════════════════════
+  {id:'t03', col:'todo', etape:2, tags:['BDD'],
+   title:'PostgreSQL — historique devis et clients',
+   desc:'Schéma : tables devis, lignes, clients, artisans. Migrations Alembic.'},
+  {id:'t04', col:'todo', etape:2, tags:['Back'],
+   title:'Authentification utilisateurs',
+   desc:'JWT ou session. Chaque artisan accède uniquement à ses devis.'},
+  {id:'t05', col:'todo', etape:2, tags:['Back'],
+   title:'Abonnements Stripe',
+   desc:'Plans Freemium / Pro. Gestion des quotas (nb de devis/mois).'},
+
+  // ══════════════════════════════════════════════
+  //  À FAIRE — Étape 3
+  // ══════════════════════════════════════════════
+  {id:'t06', col:'todo', etape:3, tags:['IA'],
+   title:'Saisie vocale (speech-to-text)',
+   desc:'Dicter la description du chantier sur mobile, mains occupées. API Web Speech ou Whisper.'},
+  {id:'t07', col:'todo', etape:3, tags:['IA'],
+   title:'Vision IA (analyse images / plans)',
+   desc:'Photo d\'un plan ou d\'un chantier → chiffrage automatique. Modèle Claude vision.'},
+]};
+
+// ---- State ----
+let state = {cards:[]};
+let filterEtape = 'all';
+let query = '';
+let editingId = null;
+let storageOk = true;
+
+// ---- Persistence ----
+async function load(){
+  try{
+    if(!window.storage) throw new Error('no storage');
+    const r = await window.storage.get(STORAGE_KEY);
+    if(r && r.value){ return JSON.parse(r.value); }
+  }catch(e){ /* absent ou indisponible */ }
+  // Fallback localStorage navigateur
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return null;
+}
+async function save(){
+  try{
+    if(!window.storage) throw new Error('no storage');
+    await window.storage.set(STORAGE_KEY, JSON.stringify(state));
+    storageOk = true;
+    return;
+  }catch(e){}
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    storageOk = true;
+  }catch(e){
+    storageOk = false;
+    document.getElementById('banner').classList.add('show');
+  }
+}
+
+// ---- Helpers ----
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function clone(o){return JSON.parse(JSON.stringify(o));}
+function toast(msg){const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1700);}
+
+function visibleCards(colId){
+  return state.cards.filter(c=>{
+    if(c.col!==colId) return false;
+    if(filterEtape!=='all' && String(c.etape)!==String(filterEtape)) return false;
+    if(query){
+      const q=query.toLowerCase();
+      if(!(c.title.toLowerCase().includes(q) || (c.desc||'').toLowerCase().includes(q))) return false;
+    }
+    return true;
+  });
+}
+
+// ---- Render ----
+function render(){
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  COLUMNS.forEach((col,ci)=>{
+    const cards = visibleCards(col.id);
+    const totalInCol = state.cards.filter(c=>c.col===col.id).length;
+    const el = document.createElement('div');
+    el.className='col'; el.dataset.col=col.id;
+    el.innerHTML = `
+      <div class="col-top-rule" style="background:${col.accent}"></div>
+      <div class="col-head">
+        <span class="dot" style="background:${col.accent}"></span>
+        <h2>${col.label}</h2>
+        <span class="count">${cards.length}${cards.length!==totalInCol?(' / '+totalInCol):''}</span>
+      </div>
+      <div class="cards" data-col="${col.id}"></div>`;
+    const list = el.querySelector('.cards');
+    if(cards.length===0){
+      const e=document.createElement('div'); e.className='empty';
+      e.textContent = totalInCol===0 ? 'Aucune carte' : 'Rien ne correspond au filtre';
+      list.appendChild(e);
+    }
+    cards.forEach(c=>list.appendChild(cardEl(c,ci)));
+    board.appendChild(el);
+  });
+  renderProgress();
+}
+
+function cardEl(c, colIndex){
+  const et = ETAPES[c.etape] || ETAPES[1];
+  const tagsHtml = (c.tags||[]).map(t=>{
+    const def = TAGS[t]; if(!def) return '';
+    return `<span class="tag" style="color:${def.color};background:${def.color}18">${def.label}</span>`;
+  }).join('');
+  const el=document.createElement('div');
+  el.className='card'+(c.col==='done'?' done':'');
+  el.draggable=true; el.dataset.id=c.id;
+  el.style.borderLeftColor = et.color;
+  el.innerHTML = `
+    <div class="title">${esc(c.title)}</div>
+    ${c.desc?`<div class="desc">${esc(c.desc)}</div>`:''}
+    <div class="meta">
+      <span class="etape" style="background:${et.color}">${et.label}</span>
+      ${tagsHtml}
+    </div>
+    <div class="foot">
+      <button class="ico" data-act="left"  ${colIndex===0?'disabled':''} title="Déplacer à gauche">&#9664;</button>
+      <button class="ico" data-act="right" ${colIndex===COLUMNS.length-1?'disabled':''} title="Déplacer à droite">&#9654;</button>
+      <button class="edit" data-act="edit">Modifier</button>
+    </div>`;
+  return el;
+}
+
+function renderProgress(){
+  const total = state.cards.length;
+  const done = state.cards.filter(c=>c.col==='done').length;
+  const pct = total? Math.round(done/total*100):0;
+  document.getElementById('pct').textContent = pct+'%';
+  document.getElementById('barfill').style.width = pct+'%';
+  const doing = state.cards.filter(c=>c.col==='doing').length;
+  const todo = state.cards.filter(c=>c.col==='todo').length;
+  document.getElementById('progress-detail').textContent = `${done} faites · ${doing} en cours · ${todo} à faire`;
+}
+
+// ---- Move ----
+function moveCard(id, dir){
+  const c = state.cards.find(x=>x.id===id); if(!c) return;
+  const i = COLUMNS.findIndex(col=>col.id===c.col);
+  const ni = Math.min(COLUMNS.length-1, Math.max(0, i+dir));
+  if(ni===i) return;
+  c.col = COLUMNS[ni].id;
+  save(); render();
+}
+function setCardCol(id, colId){
+  const c = state.cards.find(x=>x.id===id); if(!c||c.col===colId) return;
+  c.col = colId; save(); render();
+}
+
+// ---- Drag & drop (desktop) ----
+let dragId=null;
+document.getElementById('board').addEventListener('dragstart', e=>{
+  const card=e.target.closest('.card'); if(!card) return;
+  dragId=card.dataset.id; card.classList.add('dragging');
+  e.dataTransfer.effectAllowed='move';
+});
+document.getElementById('board').addEventListener('dragend', e=>{
+  const card=e.target.closest('.card'); if(card) card.classList.remove('dragging');
+  document.querySelectorAll('.col.drag-over').forEach(c=>c.classList.remove('drag-over'));
+  dragId=null;
+});
+document.getElementById('board').addEventListener('dragover', e=>{
+  const col=e.target.closest('.col'); if(!col) return;
+  e.preventDefault();
+  document.querySelectorAll('.col.drag-over').forEach(c=>{if(c!==col)c.classList.remove('drag-over');});
+  col.classList.add('drag-over');
+});
+document.getElementById('board').addEventListener('drop', e=>{
+  const col=e.target.closest('.col'); if(!col||!dragId) return;
+  e.preventDefault(); col.classList.remove('drag-over');
+  setCardCol(dragId, col.dataset.col);
+});
+
+// ---- Clicks ----
+document.getElementById('board').addEventListener('click', e=>{
+  const btn=e.target.closest('[data-act]'); if(!btn) return;
+  const card=e.target.closest('.card'); const id=card.dataset.id;
+  const act=btn.dataset.act;
+  if(act==='left') moveCard(id,-1);
+  else if(act==='right') moveCard(id,1);
+  else if(act==='edit') openModal(id);
+});
+
+// ---- Filters & search ----
+document.getElementById('etape-filters').addEventListener('click', e=>{
+  const chip=e.target.closest('.chip'); if(!chip) return;
+  filterEtape = chip.dataset.etape;
+  document.querySelectorAll('#etape-filters .chip').forEach(c=>c.classList.toggle('active', c===chip));
+  render();
+});
+document.getElementById('search').addEventListener('input', e=>{ query=e.target.value.trim(); render(); });
+
+// ---- Modal ----
+const overlay=document.getElementById('overlay');
+function buildTagPicker(selected){
+  const box=document.getElementById('f-tags'); box.innerHTML='';
+  Object.entries(TAGS).forEach(([k,def])=>{
+    const b=document.createElement('button'); b.type='button'; b.className='opt'; b.dataset.tag=k; b.textContent=def.label;
+    if(selected.includes(k)){ b.classList.add('on'); b.style.background=def.color; }
+    b.addEventListener('click',()=>{
+      const on=b.classList.toggle('on');
+      b.style.background = on?def.color:'';
+    });
+    box.appendChild(b);
+  });
+}
+function openModal(id){
+  editingId = id || null;
+  const c = id ? state.cards.find(x=>x.id===id) : null;
+  document.getElementById('modal-title').textContent = c?'Modifier la carte':'Nouvelle carte';
+  document.getElementById('f-title').value = c?c.title:'';
+  document.getElementById('f-desc').value = c?(c.desc||''):'';
+  document.getElementById('f-col').value = c?c.col:'todo';
+  document.getElementById('f-etape').value = c?c.etape:'1';
+  buildTagPicker(c?(c.tags||[]):[]);
+  document.getElementById('f-delete').style.display = c?'block':'none';
+  overlay.classList.add('show');
+  setTimeout(()=>document.getElementById('f-title').focus(),30);
+}
+function closeModal(){ overlay.classList.remove('show'); editingId=null; }
+
+document.getElementById('btn-add').addEventListener('click', ()=>openModal(null));
+document.getElementById('f-cancel').addEventListener('click', closeModal);
+overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && overlay.classList.contains('show')) closeModal(); });
+
+document.getElementById('f-save').addEventListener('click', ()=>{
+  const title=document.getElementById('f-title').value.trim();
+  if(!title){ toast('Donne un titre à la carte'); return; }
+  const tags=[...document.querySelectorAll('#f-tags .opt.on')].map(b=>b.dataset.tag);
+  const data={
+    title,
+    desc:document.getElementById('f-desc').value.trim(),
+    col:document.getElementById('f-col').value,
+    etape:parseInt(document.getElementById('f-etape').value,10),
+    tags
+  };
+  if(editingId){
+    Object.assign(state.cards.find(x=>x.id===editingId), data);
+    toast('Carte mise à jour');
+  }else{
+    data.id='c'+Date.now().toString(36);
+    state.cards.push(data);
+    toast('Carte ajoutée');
+  }
+  save(); render(); closeModal();
+});
+document.getElementById('f-delete').addEventListener('click', ()=>{
+  if(!editingId) return;
+  if(!confirm('Supprimer cette carte ?')) return;
+  state.cards = state.cards.filter(c=>c.id!==editingId);
+  save(); render(); closeModal(); toast('Carte supprimée');
+});
+
+// ---- Markdown export ----
+document.getElementById('btn-md').addEventListener('click', async ()=>{
+  let md = '## Suivi projet — DevisBTP\n\n';
+  COLUMNS.forEach(col=>{
+    const cards = state.cards.filter(c=>c.col===col.id);
+    if(!cards.length) return;
+    md += `### ${col.label}\n`;
+    cards.forEach(c=>{
+      const box = col.id==='done' ? '[x]' : '[ ]';
+      const tags = (c.tags||[]).map(t=>'#'+t).join(' ');
+      md += `- ${box} ${c.title} _(É${c.etape}${tags?' · '+tags:''})_\n`;
+    });
+    md += '\n';
+  });
+  try{
+    await navigator.clipboard.writeText(md);
+    toast('Markdown copié dans le presse-papier');
+  }catch(e){
+    const w=window.open('','_blank'); if(w){ w.document.write('<pre>'+esc(md)+'</pre>'); }
+    else toast('Copie impossible — autorise le presse-papier');
+  }
+});
+
+// ---- Reset ----
+document.getElementById('btn-reset').addEventListener('click', ()=>{
+  if(!confirm('Réinitialiser le tableau aux données d\'origine ? Tes modifications seront perdues.')) return;
+  state = clone(SEED);
+  save(); render(); toast('Tableau réinitialisé');
+});
+
+// ---- Init ----
+(async function init(){
+  const saved = await load();
+  state = saved || clone(SEED);
+  if(!saved) await save();
+  render();
+})();
+</script>
