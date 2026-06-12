@@ -239,15 +239,29 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
 
   const commitTtc = () => {
     const newTtc = parseFloat(ttcDraft);
-    if (!isNaN(newTtc) && newTtc > 0 && currentTtcDisplay > 0) {
-      const ratio = newTtc / currentTtcDisplay;
-      const updatedLignes = lignes.map(l => ({
-        ...l,
-        prix_unitaire_ht: round2(l.prix_unitaire_ht * ratio),
-      }));
-      setLignes(updatedLignes);
-      onUpdate(_buildDevis(updatedLignes, remiseType, remiseValeur, acompte));
+    if (isNaN(newTtc) || newTtc <= 0 || currentTtcDisplay <= 0) { setEditingTtc(false); return; }
+    const ratio = newTtc / currentTtcDisplay;
+    const scaled = lignes.map(l => ({
+      ...l,
+      prix_unitaire_ht: round2(l.prix_unitaire_ht * ratio),
+    }));
+    // Ajuster la dernière ligne pour absorber l'écart d'arrondi centimes
+    const scaledTotaux = computeTotaux(scaled, withTva, remiseType || null, remiseValeur || null, acompte || null);
+    const actual = withTva ? scaledTotaux.total_ttc : (scaledTotaux.total_ht_net ?? scaledTotaux.total_ht);
+    const diff = round2(newTtc - actual);
+    if (diff !== 0 && scaled.length > 0) {
+      const lastIdx = scaled.length - 1;
+      const last = scaled[lastIdx];
+      if (last.quantite > 0) {
+        const tvaMult = withTva ? (1 + last.tva_taux / 100) : 1;
+        scaled[lastIdx] = {
+          ...last,
+          prix_unitaire_ht: round2(last.prix_unitaire_ht + diff / (last.quantite * tvaMult)),
+        };
+      }
     }
+    setLignes(scaled);
+    onUpdate(_buildDevis(scaled, remiseType, remiseValeur, acompte));
     setEditingTtc(false);
   };
 
@@ -285,6 +299,11 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
             <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: "#14532D" }}>Client</div>
             <div className="font-semibold" style={{ color: "#18211C" }}>{devis.client.nom}</div>
             {devis.client.adresse && <div className="text-sm" style={{ color: "#5A635D" }}>{devis.client.adresse}</div>}
+            {(devis.client.code_postal || devis.client.ville) && (
+              <div className="text-sm" style={{ color: "#5A635D" }}>
+                {[devis.client.code_postal, devis.client.ville].filter(Boolean).join(" ")}
+              </div>
+            )}
           </div>
         )}
         <div className="rounded-xl p-4 bg-amber-50" style={{ borderLeft: "4px solid #F59E0B" }}>

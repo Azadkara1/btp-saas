@@ -65,6 +65,8 @@ export interface Devis {
   remise_valeur?: number | null;
   acompte?: number | null;
   modele?: string | null;
+  validite_jours?: number | null;
+  conditions_paiement?: string | null;
 }
 
 // ── Requête / Réponse API ────────────────────────────────────────
@@ -93,6 +95,8 @@ export interface QuoteRequest {
   client_code_postal?: string;
   client_ville?: string;
   numero_document?: string;
+  validite_jours?: number;
+  conditions_paiement?: string;
   remise_type?: string;
   remise_valeur?: number;
   acompte?: number;

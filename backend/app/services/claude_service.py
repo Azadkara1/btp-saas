@@ -4,7 +4,9 @@ Gère le Tool Use pour la recherche de prix du marché.
 Isolé ici pour faciliter les tests et l'évolution (Étape 3 : vision, voix).
 """
 import json
+import logging
 import re
+from collections import Counter
 import anthropic
 from typing import Optional
 
@@ -90,6 +92,13 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
                 result.devis.modele = request.modele or "moderne"
                 if request.client_code_postal: result.devis.client.code_postal = request.client_code_postal
                 if request.client_ville:       result.devis.client.ville       = request.client_ville
+                if request.validite_jours is not None: result.devis.validite_jours = request.validite_jours
+                if request.conditions_paiement: result.devis.conditions_paiement = request.conditions_paiement
+                # Garde-fou : avertir si plusieurs lignes de natures différentes ont le même PU
+                pus = [round(l.prix_unitaire_ht, 2) for l in result.devis.lignes]
+                duplicates = [pu for pu, cnt in Counter(pus).items() if cnt > 1]
+                if duplicates:
+                    logging.warning("[DEVIS] PU identiques sur plusieurs lignes : %s", duplicates)
             return result
 
         # Claude veut utiliser un outil

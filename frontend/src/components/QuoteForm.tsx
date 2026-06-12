@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { Loader2, Wand2, Plus, X, ChevronDown, ChevronRight, Building2, CheckCircle2 } from "lucide-react";
+import { Loader2, Wand2, Plus, X, ChevronDown, Building2, CheckCircle2 } from "lucide-react";
 import { generateQuote } from "@/lib/api";
 import { QuoteRequest, QuoteResponse, PrixArtisan } from "@/lib/types";
 
 interface QuoteFormProps {
   onQuoteGenerated: (response: QuoteResponse) => void;
   modele?: string;
+  docType?: "devis" | "facture";
 }
 
 const REGIONS = [
@@ -81,12 +82,18 @@ function Collapsible({
   );
 }
 
-export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage }: QuoteFormProps) {
+export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, docType = "devis" }: QuoteFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<Warning[] | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // CP → Ville autocomplete
+  const [clientVilleOptions, setClientVilleOptions]   = useState<string[]>([]);
+  const [artisanVilleOptions, setArtisanVilleOptions] = useState<string[]>([]);
+  const clientCpTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const artisanCpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ARTISAN_LS_KEY = "artisan_profile";
 
@@ -99,6 +106,8 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage }: 
     artisan_logo_base64: "",
     client_nom: "", client_adresse: "", client_code_postal: "", client_ville: "",
     numero_document: "",
+    validite_jours: 30,
+    conditions_paiement: "",
   };
 
   const [form, setForm] = useState<QuoteRequest>(DEFAULT_FORM);
@@ -137,6 +146,21 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage }: 
     form.artisan_logo_base64,
   ]);
 
+  // Numéro de document auto-incrémenté (T5)
+  useEffect(() => {
+    try {
+      const year = new Date().getFullYear();
+      const key  = `devisbtp_ctr_${docType}_${year}`;
+      const last = parseInt(localStorage.getItem(key) || "0", 10);
+      const next = last + 1;
+      const prefix = docType === "facture" ? "FAC" : "DEV";
+      setForm(prev => ({
+        ...prev,
+        numero_document: `${prefix}-${year}-${String(next).padStart(3, "0")}`,
+      }));
+    } catch {}
+  }, [docType]);
+
   // Fermeture du dropdown au clic extérieur
   useEffect(() => {
     if (!dropdownOpen) return;
@@ -147,6 +171,26 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage }: 
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [dropdownOpen]);
+
+  // CP → Ville via geo.api.gouv.fr (T3)
+  const fetchVillesByCp = async (
+    cp: string,
+    setOptions: (opts: string[]) => void,
+    autoFill: (ville: string) => void,
+  ) => {
+    if (!/^\d{5}$/.test(cp)) { setOptions([]); return; }
+    try {
+      const res = await fetch(
+        `https://geo.api.gouv.fr/communes?codePostal=${cp}&fields=nom&format=json`,
+      );
+      if (!res.ok) { setOptions([]); return; }
+      const data: { nom: string }[] = await res.json();
+      const noms = data.map(d => d.nom);
+      if (noms.length === 1) { autoFill(noms[0]); setOptions([]); }
+      else if (noms.length > 1) setOptions(noms);
+      else setOptions([]);
+    } catch { setOptions([]); }
+  };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -189,6 +233,13 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage }: 
         modele: modeleFromPage || "moderne",
       });
       if (response.success) {
+        // Incrémenter le compteur de numéro de document
+        try {
+          const year = new Date().getFullYear();
+          const key  = `devisbtp_ctr_${docType}_${year}`;
+          const last = parseInt(localStorage.getItem(key) || "0", 10);
+          localStorage.setItem(key, String(last + 1));
+        } catch {}
         onQuoteGenerated(response);
       } else {
         setError(response.error || "Une erreur est survenue.");
@@ -344,11 +395,36 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage }: 
           </Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Code postal">
-              <input name="artisan_code_postal" value={form.artisan_code_postal} onChange={handleChange}
-                placeholder="69001" className="input-field" />
+              <div className="relative">
+                <input name="artisan_code_postal" value={form.artisan_code_postal}
+                  onChange={e => {
+                    handleChange(e);
+                    const cp = e.target.value;
+                    if (artisanCpTimer.current) clearTimeout(artisanCpTimer.current);
+                    artisanCpTimer.current = setTimeout(() => fetchVillesByCp(
+                      cp, setArtisanVilleOptions,
+                      ville => setForm(prev => ({ ...prev, artisan_ville: ville })),
+                    ), 400);
+                  }}
+                  placeholder="69001" className="input-field" />
+                {artisanVilleOptions.length > 1 && (
+                  <ul className="absolute z-50 w-full bg-white border rounded-xl shadow-md mt-1 max-h-48 overflow-y-auto"
+                    style={{ borderColor: "rgba(20,83,45,0.2)" }}>
+                    {artisanVilleOptions.map(v => (
+                      <li key={v}>
+                        <button type="button"
+                          onClick={() => { setForm(prev => ({ ...prev, artisan_ville: v })); setArtisanVilleOptions([]); }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-green-50" style={{ color: "#18211C" }}>
+                          {v}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </Field>
             <Field label="Ville">
-              <input name="artisan_ville" value={form.artisan_ville} onChange={handleChange}
+              <input name="artisan_ville" value={form.artisan_ville} onChange={e => { handleChange(e); setArtisanVilleOptions([]); }}
                 placeholder="Lyon" className="input-field" />
             </Field>
           </div>
@@ -410,11 +486,36 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage }: 
               placeholder="12 rue des Fleurs" className="input-field" />
           </Field>
           <Field label="Code postal">
-            <input name="client_code_postal" value={form.client_code_postal ?? ""} onChange={handleChange}
-              placeholder="69001" className="input-field" />
+            <div className="relative">
+              <input name="client_code_postal" value={form.client_code_postal ?? ""}
+                onChange={e => {
+                  handleChange(e);
+                  const cp = e.target.value;
+                  if (clientCpTimer.current) clearTimeout(clientCpTimer.current);
+                  clientCpTimer.current = setTimeout(() => fetchVillesByCp(
+                    cp, setClientVilleOptions,
+                    ville => setForm(prev => ({ ...prev, client_ville: ville })),
+                  ), 400);
+                }}
+                placeholder="69001" className="input-field" />
+              {clientVilleOptions.length > 1 && (
+                <ul className="absolute z-50 w-full bg-white border rounded-xl shadow-md mt-1 max-h-48 overflow-y-auto"
+                  style={{ borderColor: "rgba(20,83,45,0.2)" }}>
+                  {clientVilleOptions.map(v => (
+                    <li key={v}>
+                      <button type="button"
+                        onClick={() => { setForm(prev => ({ ...prev, client_ville: v })); setClientVilleOptions([]); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-green-50" style={{ color: "#18211C" }}>
+                        {v}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </Field>
           <Field label="Ville">
-            <input name="client_ville" value={form.client_ville ?? ""} onChange={handleChange}
+            <input name="client_ville" value={form.client_ville ?? ""} onChange={e => { handleChange(e); setClientVilleOptions([]); }}
               placeholder="Lyon" className="input-field" />
           </Field>
         </div>
@@ -505,11 +606,28 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage }: 
         </Field>
       </Collapsible>
 
-      {/* ── Numéro de document ───────────────────────────────────── */}
-      <Collapsible label="Numéro de document">
-        <div className="pt-2">
-          <input name="numero_document" value={form.numero_document ?? ""} onChange={handleChange}
-            placeholder="Ex : DEV-2026-001 ou FAC-2026-042" className="input-field" />
+      {/* ── Paramètres du document ───────────────────────────────── */}
+      <Collapsible label="Paramètres du document">
+        <div className="pt-2 space-y-4">
+          <Field label="Numéro de document">
+            <input name="numero_document" value={form.numero_document ?? ""} onChange={handleChange}
+              placeholder="Ex : DEV-2026-001" className="input-field" />
+            <p className="text-xs mt-1" style={{ color: "#7C857F" }}>
+              Pré-rempli automatiquement — modifiable librement.
+            </p>
+          </Field>
+          {docType === "devis" && (
+            <Field label="Validité du devis (jours)">
+              <input type="number" name="validite_jours"
+                value={form.validite_jours ?? 30}
+                onChange={e => setForm(prev => ({ ...prev, validite_jours: parseInt(e.target.value) || 30 }))}
+                min="1" max="365" className="input-field" />
+            </Field>
+          )}
+          <Field label="Conditions de paiement">
+            <input name="conditions_paiement" value={form.conditions_paiement ?? ""} onChange={handleChange}
+              placeholder="Ex : 30% à la commande, solde à réception" className="input-field" />
+          </Field>
         </div>
       </Collapsible>
 

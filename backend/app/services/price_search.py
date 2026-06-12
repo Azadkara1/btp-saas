@@ -19,51 +19,86 @@ STOP_WORDS = {
 # Fourchettes moyennes nationales — clés en minuscules, séparées par espaces
 PRIX_REFERENCE = {
     # Terrassement / Gros œuvre
-    "maçonnerie":               {"prix": 45.0,  "unite": "m²",      "fourchette": "35-60"},
-    "béton":                    {"prix": 95.0,  "unite": "m³",      "fourchette": "80-120"},
-    "terrassement":             {"prix": 12.0,  "unite": "m³",      "fourchette": "8-20"},
-    "charpente":                {"prix": 80.0,  "unite": "m²",      "fourchette": "60-110"},
+    "maçonnerie":                     {"prix": 45.0,   "unite": "m²",      "fourchette": "35-60"},
+    "béton":                          {"prix": 95.0,   "unite": "m³",      "fourchette": "80-120"},
+    "dalle béton":                    {"prix": 85.0,   "unite": "m²",      "fourchette": "65-110"},
+    "terrassement":                   {"prix": 12.0,   "unite": "m³",      "fourchette": "8-20"},
+    "fondations":                     {"prix": 280.0,  "unite": "ml",      "fourchette": "200-380"},
+    "parpaings élévation murs":       {"prix": 75.0,   "unite": "m²",      "fourchette": "55-95"},
+    "enduit extérieur façade":        {"prix": 42.0,   "unite": "m²",      "fourchette": "30-60"},
+    "charpente":                      {"prix": 80.0,   "unite": "m²",      "fourchette": "60-110"},
+    "reprise sous-oeuvre":            {"prix": 450.0,  "unite": "ml",      "fourchette": "300-700"},
 
-    # Carrelage — entrées distinctes pour éviter les confusions
-    "dépose carrelage":         {"prix": 15.0,  "unite": "m²",      "fourchette": "10-22"},
-    "pose carrelage":           {"prix": 35.0,  "unite": "m²",      "fourchette": "25-50"},
-    "fourniture carrelage":     {"prix": 30.0,  "unite": "m²",      "fourchette": "15-60"},
-    "carrelage fourniture pose":{"prix": 65.0,  "unite": "m²",      "fourchette": "50-90"},
+    # Couverture / Toiture
+    "toiture tuiles":                 {"prix": 120.0,  "unite": "m²",      "fourchette": "90-160"},
+    "toiture ardoises":               {"prix": 145.0,  "unite": "m²",      "fourchette": "110-200"},
+    "zinguerie":                      {"prix": 55.0,   "unite": "ml",      "fourchette": "40-80"},
+    "fenêtre toit velux":             {"prix": 900.0,  "unite": "unité",   "fourchette": "600-1400"},
+    "isolation combles":              {"prix": 30.0,   "unite": "m²",      "fourchette": "20-45"},
+
+    # Carrelage — entrées distinctes
+    "dépose carrelage":               {"prix": 15.0,   "unite": "m²",      "fourchette": "10-22"},
+    "pose carrelage":                 {"prix": 35.0,   "unite": "m²",      "fourchette": "25-50"},
+    "fourniture carrelage":           {"prix": 30.0,   "unite": "m²",      "fourchette": "15-60"},
+    "carrelage fourniture pose":      {"prix": 65.0,   "unite": "m²",      "fourchette": "50-90"},
+    "faïence murale":                 {"prix": 55.0,   "unite": "m²",      "fourchette": "40-80"},
+    "ragréage sol":                   {"prix": 18.0,   "unite": "m²",      "fourchette": "12-28"},
 
     # Peinture
-    "peinture intérieure":      {"prix": 18.0,  "unite": "m²",      "fourchette": "12-25"},
-    "peinture façade":          {"prix": 25.0,  "unite": "m²",      "fourchette": "18-35"},
+    "peinture intérieure":            {"prix": 18.0,   "unite": "m²",      "fourchette": "12-25"},
+    "peinture façade":                {"prix": 25.0,   "unite": "m²",      "fourchette": "18-35"},
+    "enduit décoratif":               {"prix": 32.0,   "unite": "m²",      "fourchette": "22-50"},
+    "papier peint pose":              {"prix": 22.0,   "unite": "m²",      "fourchette": "15-35"},
 
     # Plâtrerie / Cloisons / Isolation
-    "enduit plâtre":            {"prix": 22.0,  "unite": "m²",      "fourchette": "15-30"},
-    "placo pose":               {"prix": 28.0,  "unite": "m²",      "fourchette": "20-38"},
-    "isolation thermique":      {"prix": 25.0,  "unite": "m²",      "fourchette": "18-40"},
+    "enduit plâtre":                  {"prix": 22.0,   "unite": "m²",      "fourchette": "15-30"},
+    "placo cloison":                  {"prix": 28.0,   "unite": "m²",      "fourchette": "20-38"},
+    "faux plafond":                   {"prix": 35.0,   "unite": "m²",      "fourchette": "25-50"},
+    "isolation thermique":            {"prix": 25.0,   "unite": "m²",      "fourchette": "18-40"},
+    "isolation phonique":             {"prix": 30.0,   "unite": "m²",      "fourchette": "22-45"},
+    "ite isolation extérieure":       {"prix": 120.0,  "unite": "m²",      "fourchette": "90-160"},
+    "doublage intérieur":             {"prix": 35.0,   "unite": "m²",      "fourchette": "25-50"},
 
-    # Électricité — une entrée par type de prestation
-    "prise électrique":         {"prix": 45.0,  "unite": "unité",   "fourchette": "35-65"},
-    "interrupteur":             {"prix": 35.0,  "unite": "unité",   "fourchette": "25-55"},
-    "point lumineux":           {"prix": 85.0,  "unite": "point",   "fourchette": "60-120"},
-    "tableau électrique":       {"prix": 900.0, "unite": "forfait", "fourchette": "600-1400"},
+    # Électricité
+    "prise électrique":               {"prix": 45.0,   "unite": "unité",   "fourchette": "35-65"},
+    "interrupteur":                   {"prix": 35.0,   "unite": "unité",   "fourchette": "25-55"},
+    "point lumineux":                 {"prix": 85.0,   "unite": "point",   "fourchette": "60-120"},
+    "tableau électrique":             {"prix": 900.0,  "unite": "forfait", "fourchette": "600-1400"},
+    "passage câbles":                 {"prix": 22.0,   "unite": "ml",      "fourchette": "15-35"},
+    "borne recharge véhicule":        {"prix": 1200.0, "unite": "forfait", "fourchette": "800-1800"},
+    "éclairage led":                  {"prix": 65.0,   "unite": "point",   "fourchette": "45-90"},
 
     # Plomberie
-    "plomberie evacuation":     {"prix": 55.0,  "unite": "ml",      "fourchette": "40-75"},
-    "robinetterie":             {"prix": 120.0, "unite": "point",   "fourchette": "80-200"},
-    "sanitaire":                {"prix": 250.0, "unite": "point",   "fourchette": "150-400"},
+    "plomberie evacuation":           {"prix": 55.0,   "unite": "ml",      "fourchette": "40-75"},
+    "robinetterie":                   {"prix": 120.0,  "unite": "point",   "fourchette": "80-200"},
+    "wc suspendu":                    {"prix": 550.0,  "unite": "unité",   "fourchette": "350-800"},
+    "baignoire":                      {"prix": 700.0,  "unite": "unité",   "fourchette": "450-1100"},
+    "douche italienne":               {"prix": 900.0,  "unite": "unité",   "fourchette": "600-1400"},
+    "chaudière gaz":                  {"prix": 2800.0, "unite": "forfait", "fourchette": "2000-4000"},
+    "pompe à chaleur":                {"prix": 8500.0, "unite": "forfait", "fourchette": "6000-12000"},
+    "vmc double flux":                {"prix": 3200.0, "unite": "forfait", "fourchette": "2400-4500"},
+    "remplacement robinetterie":      {"prix": 150.0,  "unite": "point",   "fourchette": "100-250"},
 
     # Menuiserie
-    "fenêtre pvc":              {"prix": 650.0, "unite": "unité",   "fourchette": "450-900"},
-    "porte intérieure":         {"prix": 350.0, "unite": "unité",   "fourchette": "200-600"},
-    "volet roulant":            {"prix": 500.0, "unite": "unité",   "fourchette": "350-800"},
+    "fenêtre pvc":                    {"prix": 650.0,  "unite": "unité",   "fourchette": "450-900"},
+    "porte intérieure":               {"prix": 350.0,  "unite": "unité",   "fourchette": "200-600"},
+    "porte entrée":                   {"prix": 1200.0, "unite": "unité",   "fourchette": "800-2000"},
+    "volet roulant":                  {"prix": 500.0,  "unite": "unité",   "fourchette": "350-800"},
+    "cuisine équipée":                {"prix": 5500.0, "unite": "forfait", "fourchette": "3500-9000"},
 
     # Revêtements sols
-    "parquet pose":             {"prix": 30.0,  "unite": "m²",      "fourchette": "20-45"},
-    "moquette":                 {"prix": 18.0,  "unite": "m²",      "fourchette": "12-28"},
+    "parquet pose":                   {"prix": 30.0,   "unite": "m²",      "fourchette": "20-45"},
+    "parquet fourniture pose":        {"prix": 65.0,   "unite": "m²",      "fourchette": "45-100"},
+    "stratifié pose":                 {"prix": 22.0,   "unite": "m²",      "fourchette": "15-35"},
+    "moquette":                       {"prix": 18.0,   "unite": "m²",      "fourchette": "12-28"},
 
-    # Toiture
-    "toiture tuiles":           {"prix": 120.0, "unite": "m²",      "fourchette": "90-160"},
+    # Démolition
+    "démolition cloison":             {"prix": 35.0,   "unite": "m²",      "fourchette": "25-55"},
+    "dépose revêtement":              {"prix": 12.0,   "unite": "m²",      "fourchette": "8-20"},
+    "évacuation gravats":             {"prix": 80.0,   "unite": "m³",      "fourchette": "60-120"},
 
     # Main d'œuvre générique (dernier recours)
-    "main d'oeuvre":            {"prix": 45.0,  "unite": "heure",   "fourchette": "35-60"},
+    "main d'oeuvre":                  {"prix": 45.0,   "unite": "heure",   "fourchette": "35-60"},
 }
 
 # Coefficient régional approximatif

@@ -256,10 +256,11 @@ def generate_quote_docx(
     _run(p2, f"Date : {doc_date}", size=9, color=COL_INFO if not is_pro else RGBColor(90, 99, 93))
 
     if document_type == "devis":
+        validite = devis.validite_jours or 30
         p3 = rc.add_paragraph()
         p3.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         _zero_para_spacing(p3)
-        _run(p3, "Valable 30 jours", size=9, color=COL_INFO if not is_pro else RGBColor(90, 99, 93))
+        _run(p3, f"Valable {validite} jours", size=9, color=COL_INFO if not is_pro else RGBColor(90, 99, 93))
 
     if devis.numero_document:
         num_label = "N Facture" if document_type == "facture" else "N Devis"
@@ -305,7 +306,8 @@ def generate_quote_docx(
     _run(p, "CHANTIER", size=8, color=AMBER, bold=True)
     p2 = ch.add_paragraph()
     _zero_para_spacing(p2)
-    _run(p2, devis.chantier.description, size=9, color=BLACK)
+    desc_txt = (devis.chantier.description or "")[:800]  # cap très longues descriptions
+    _run(p2, desc_txt, size=9, color=BLACK)
 
     sep2 = doc.add_paragraph()
     _zero_para_spacing(sep2)
@@ -555,7 +557,33 @@ def generate_quote_docx(
     sep5 = doc.add_paragraph("─" * 90)
     _zero_para_spacing(sep5)
 
-    for mention in devis.mentions_legales:
+    # Construire la liste finale des mentions
+    validite_w = devis.validite_jours or 30
+    final_mentions_w = []
+    for m in devis.mentions_legales:
+        ml = m.lower()
+        if "valable" in ml and "jours" in ml:
+            if document_type == "devis":
+                final_mentions_w.append(f"Devis valable {validite_w} jours a compter de la date d'emission")
+        else:
+            final_mentions_w.append(m)
+
+    if document_type == "devis":
+        if not any("valable" in m.lower() for m in final_mentions_w):
+            final_mentions_w.insert(0, f"Devis valable {validite_w} jours a compter de la date d'emission")
+        if not any("accord" in m.lower() for m in final_mentions_w):
+            final_mentions_w.append("Signature du client precedee de la mention 'Bon pour accord'")
+    else:
+        if not any("retard" in m.lower() or "penalite" in m.lower() for m in final_mentions_w):
+            final_mentions_w.append(
+                "Tout retard de paiement entraine des penalites de retard au taux legal "
+                "majore de 10 points + indemnite forfaitaire de 40 EUR pour frais de recouvrement"
+            )
+
+    if devis.conditions_paiement:
+        final_mentions_w.append(f"Conditions de paiement : {devis.conditions_paiement}")
+
+    for mention in final_mentions_w:
         p = doc.add_paragraph(f"• {mention}")
         _zero_para_spacing(p)
         p.runs[0].font.size = Pt(8)

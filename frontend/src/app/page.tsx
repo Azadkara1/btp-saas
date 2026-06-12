@@ -100,7 +100,7 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
-            <QuoteForm onQuoteGenerated={handleQuoteGenerated} modele={modele} />
+            <QuoteForm onQuoteGenerated={handleQuoteGenerated} modele={modele} docType={documentType} />
           </>
         ) : (
           <div id="quote-result" className="space-y-4">
