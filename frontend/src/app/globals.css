@@ -3,36 +3,54 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --background: 255 255 255;
-    --foreground: 17 24 39;
-  }
-
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    background-color: #FAFAF7;
+    background-image: radial-gradient(rgba(20, 83, 45, 0.032) 1px, transparent 1px);
+    background-size: 22px 22px;
+    color: #18211C;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Optimisation mobile — taille de police confortable sur chantier */
   input, textarea, select, button {
-    @apply text-base;
+    font-size: 1rem;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 active:bg-blue-800
-           text-white font-semibold py-3 px-6 rounded-xl
-           transition-colors duration-150 cursor-pointer
+    @apply text-white font-semibold py-3 px-6 cursor-pointer
+           transition-colors duration-150
            disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: #14532D;
+    border-radius: 14px;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: #0F3D21;
+  }
+  .btn-primary:active:not(:disabled) {
+    background-color: #0A2D18;
   }
 
   .card {
-    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-6;
+    @apply bg-white p-6;
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(24, 33, 28, 0.04);
+    border: 0.5px solid rgba(20, 83, 45, 0.1);
   }
 
   .input-field {
-    @apply w-full border border-gray-300 rounded-xl px-4 py-3
-           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-           placeholder-gray-400 transition;
+    @apply w-full px-4 py-3 transition bg-white;
+    border: 1px solid rgba(20, 83, 45, 0.14);
+    border-radius: 12px;
+    outline: none;
+    color: #18211C;
+  }
+  .input-field::placeholder {
+    color: #7C857F;
+  }
+  .input-field:focus {
+    border-color: #14532D;
+    box-shadow: 0 0 0 2px rgba(20, 83, 45, 0.12);
   }
 }

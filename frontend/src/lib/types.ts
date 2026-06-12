@@ -20,6 +20,8 @@ export interface LigneDevis {
 export interface ClientInfo {
   nom?: string | null;
   adresse?: string | null;
+  code_postal?: string | null;
+  ville?: string | null;
 }
 
 export interface ArtisanInfo {
@@ -62,6 +64,7 @@ export interface Devis {
   remise_type?: string | null;
   remise_valeur?: number | null;
   acompte?: number | null;
+  modele?: string | null;
 }
 
 // ── Requête / Réponse API ────────────────────────────────────────
@@ -87,10 +90,13 @@ export interface QuoteRequest {
   artisan_logo_base64?: string;
   client_nom?: string;
   client_adresse?: string;
+  client_code_postal?: string;
+  client_ville?: string;
   numero_document?: string;
   remise_type?: string;
   remise_valeur?: number;
   acompte?: number;
+  modele?: string;
   prix_personnalises?: PrixArtisan[];
 }
 

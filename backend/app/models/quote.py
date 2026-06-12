@@ -40,6 +40,8 @@ class LigneDevis(BaseModel):
 class ClientInfo(BaseModel):
     nom: Optional[str] = None
     adresse: Optional[str] = None
+    code_postal: Optional[str] = None
+    ville: Optional[str] = None
 
 
 class ArtisanInfo(BaseModel):
@@ -86,6 +88,7 @@ class Devis(BaseModel):
     remise_type: Optional[str] = None      # "pourcentage" | "montant_fixe"
     remise_valeur: Optional[float] = None
     acompte: Optional[float] = None
+    modele: Optional[str] = "moderne"     # "moderne" | "pro" — injecté post-génération, jamais envoyé à Claude
 
 
 # ── Prix personnalisés fournis par l'artisan ─────────────────────
@@ -121,10 +124,13 @@ class QuoteRequest(BaseModel):
     artisan_logo_base64: Optional[str] = None
     client_nom: Optional[str] = None
     client_adresse: Optional[str] = None
+    client_code_postal: Optional[str] = None
+    client_ville: Optional[str] = None
     numero_document: Optional[str] = None
     remise_type: Optional[str] = None
     remise_valeur: Optional[float] = None
     acompte: Optional[float] = None
+    modele: Optional[str] = "moderne"
     prix_personnalises: Optional[List[PrixArtisan]] = Field(
         default=None,
         description="Tarifs de l'artisan à utiliser en priorité"

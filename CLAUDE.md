@@ -1,11 +1,22 @@
 # CLAUDE.md — Contexte projet BTP SaaS
 
-## 📍 État du projet — 11 juin 2026
+## 📍 État du projet — 12 juin 2026
 
-### Étape 1 — MVP (en cours · ~93 % fait)
+### Étape 1 — MVP (en cours · ~97 % fait)
 
 **Tout ce qui est implémenté ✅**
 Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC, logo artisan, groupement LOT, pagination multi-pages, validation formulaire artisan, numéro de document, dropdown prestations BTP (9 groupes), remise (% ou montant fixe) + acompte, format monétaire français, signature client, mentions légales + RIB.
+
+**Refonte UI + nouvelles fonctionnalités (12 juin 2026) ✅**
+- Palette verte premium (`#14532D`) — globals.css + Inter via next/font/google
+- QuoteForm redesign : dropdown custom PRESTATIONS_BTP groupé, carte « Infos entreprise » (badge « Enregistré »), sections accordéon (Mes prix, Remise, Numéro)
+- Champ `modele` : « moderne » | « pro » — dans Devis + QuoteRequest, injecté post-Claude
+- 2 modèles PDF : moderne (bandeau vert plein, Helvetica) / pro (anthracite, Times, filets)
+- 2 modèles Word : moderne (Calibri, vert) / pro (Georgia, anthracite bleu acier)
+- Logo PDF + Word : aspect ratio préservé (PIL), max 38×28 mm PDF / 4×2.5 cm Word
+- Colonne Unité séparée de Qté (PDF, Word, aperçu)
+- TTC éditable dans QuotePreview (ratio appliqué à chaque PU HT)
+- Bascule modèle Moderne ↔ Pro en direct dans QuotePreview + sélecteur dans page.tsx
 
 **Ce qui reste à faire ⏳**
 - **Bug prix** : l'IA retourne parfois des tarifs identiques pour plusieurs postes → retravailler `price_search.py` ou le prompt
@@ -74,12 +85,8 @@ backend/app/
 ├── core/
 │   ├── config.py        # Settings via pydantic-settings (.env)
 │   └── prompts.py       # ⚠️ Prompts Claude ICI UNIQUEMENT — jamais inline dans les services
-│                        #   Inclut les règles de groupement par LOT
 ├── models/
-│   └── quote.py         # Source de vérité Pydantic — TOUJOURS vérifier l'impact sur
-│                        #   claude_service / pdf_service / word_service / lib/types.ts
-│                        #   avant toute modification
-│                        #
+│   └── quote.py         # Source de vérité Pydantic
 │                        #   LigneDevis    : lot?, poste, description, quantite, unite,
 │                        #                   prix_unitaire_ht, tva_taux, source_prix
 │                        #   ArtisanInfo   : nom, siret, adresse, code_postal, ville,
@@ -88,10 +95,12 @@ backend/app/
 │                        #                   remise_ht=0.0, total_ht_net=0.0, net_a_payer=0.0
 │                        #   Devis         : client, artisan, chantier, lignes, totaux,
 │                        #                   mentions_legales, notes?, numero_document?,
-│                        #                   remise_type?, remise_valeur?, acompte?
+│                        #                   remise_type?, remise_valeur?, acompte?,
+│                        #                   modele?="moderne"
 │                        #   QuoteRequest  : description, region, artisan_* (11 champs),
 │                        #                   client_nom, client_adresse, numero_document,
 │                        #                   remise_type, remise_valeur, acompte,
+│                        #                   modele?="moderne",
 │                        #                   prix_personnalises?
 ├── routers/
 │   ├── quotes.py        # POST /quotes/generate
@@ -101,16 +110,21 @@ backend/app/
     ├── claude_service.py  # Orchestration API Anthropic + boucle Tool Use agentic
     │                      #   ⚠️ Injection POST-GÉNÉRATION (jamais envoyé à Claude) :
     │                      #     adresse, cp, ville, tel, email, site_web, logo, iban, bic,
-    │                      #     numero_document, remise_type, remise_valeur, acompte
+    │                      #     numero_document, remise_type, remise_valeur, acompte, modele
     ├── price_search.py    # Base de prix BTP 2026 + coefficients régionaux (12 régions)
-    ├── pdf_service.py     # Génération PDF — fpdf2, A4, Helvetica + cp1252
-    │                      #   Logo : w=38 mm côte-à-côte avec le texte artisan (x=57)
-    │                      #   Tableau : auto_page_break=False pendant rendu, sauts manuels
+    ├── pdf_service.py     # Génération PDF — fpdf2, A4
+    │                      #   Modèle « moderne » : bandeau vert #14532D, Helvetica, lots #E3EDE6
+    │                      #   Modèle « pro »     : fond blanc, Times, anthracite #1F2937,
+    │                      #                        lots texte bleu acier #3B5573, filets épais
+    │                      #   Logo : PIL pour aspect ratio, max 38×28 mm, décalage texte dynamique
+    │                      #   Colonnes : Prestation | Description | Qté | Unité | PU HT | [TVA] | Total HT
     │                      #   Totaux enrichis : remise / HT net / TVA / TTC / acompte / net
     │                      #   Signature : 2 encadrés "Bon pour accord" + "Signature client"
     └── word_service.py    # Génération Word — python-docx
-                           #   Logo : Cm(4.5) dans cell gauche de l'en-tête
-                           #   Totaux enrichis : idem PDF, ligne verte pour NET À PAYER
+                           #   Modèle « moderne » : Calibri, fond vert #14532D en-tête
+                           #   Modèle « pro »     : Georgia, anthracite, filets épais
+                           #   Logo : PIL pour aspect ratio, max 4×2.5 cm
+                           #   Colonnes : idem PDF
 ```
 
 ---
@@ -121,48 +135,44 @@ backend/app/
 frontend/src/
 ├── app/
 │   ├── page.tsx         # Chef d'orchestre : états result (Devis|null), documentType,
-│   │                    #   withTva, documentDate — layout max-w-5xl (1024px)
-│   └── globals.css      # Styles globaux Tailwind
+│   │                    #   withTva, documentDate, modele ("moderne"|"pro")
+│   │                    #   DocTypeToggle + ModelToggle côte à côte (form screen)
+│   │                    #   layout max-w-5xl, palette verte #14532D
+│   └── globals.css      # Palette verte :
+│                        #   body #FAFAF7, .btn-primary #14532D→#0F3D21, radius 14px
+│                        #   .card radius 16px, ombre discrète, bordure rgba(20,83,45,.1)
+│                        #   .input-field focus ring vert, border rgba(20,83,45,.14)
 ├── components/
 │   ├── QuoteForm.tsx    # Formulaire principal
-│   │                    #   ① Textarea description + dropdown PRESTATIONS_BTP (9 groupes)
-│   │                    #     → sélection append au textarea, select reset à ""
-│   │                    #   ② Numéro de document (libre, ex: DEV-2026-001)
-│   │                    #   ③ Région (pour prix du marché)
-│   │                    #   ④ "Mes prix habituels" : saisie nom/prix/unité, badge Votre prix
-│   │                    #   ⑤ "Remise et acompte" : type (%/fixe), valeur, acompte versé
-│   │                    #   ⑥ "Informations optionnelles" : artisan (nom, siret, adresse,
-│   │                    #     cp, ville, tel, email, site_web, logo, iban, bic) + client
-│   │                    #   Validation non bloquante : SIRET 14 chiffres, IBAN, BIC, email,
-│   │                    #     code postal 5 chiffres → panneau avertissements + "Générer quand même"
+│   │                    #   ① Textarea description + dropdown PRESTATIONS_BTP custom groupé
+│   │                    #     → sélection append + fermeture au clic extérieur
+│   │                    #   ② Région (select)
+│   │                    #   ③ Carte « Mon entreprise » accordéon — badge « Enregistré »
+│   │                    #     nom, SIRET, adresse, CP, ville, tel, email, site_web, logo, IBAN, BIC
+│   │                    #   ④ Bloc client (nom client, adresse chantier)
+│   │                    #   ⑤ « Mes prix habituels » accordéon
+│   │                    #   ⑥ « Remise & acompte » accordéon
+│   │                    #   ⑦ « Numéro de document » accordéon
+│   │                    #   modele reçu en prop depuis page.tsx → envoyé dans QuoteRequest
 │   │                    #   Persistance localStorage "artisan_profile" (champs artisan)
-│   │                    #   ⚠️ localStorage dans useEffect uniquement (pas useState → hydratation SSR)
+│   │                    #   ⚠️ localStorage dans useEffect uniquement (pas useState)
 │   │
 │   ├── QuotePreview.tsx # Aperçu éditable inline
-│   │                    #   Champs éditables : Poste, Description, Lot, Qté, Unité,
-│   │                    #     PU HT, TVA (select), Total HT (back-calcule PU)
-│   │                    #   Groupement LOT : headers slate-600, sous-totaux par groupe
-│   │                    #   Totaux enrichis (T9) :
-│   │                    #     - Remise : select type + input valeur → affiche - X €
-│   │                    #     - Total HT net (si remise)
-│   │                    #     - TVA recalculée proportionnellement (ratio ht_net/ht_brut)
-│   │                    #     - Total TTC ou Total HT (selon mode TVA)
-│   │                    #     - Acompte versé (input numérique)
-│   │                    #     - NET À PAYER (fond vert, si acompte > 0)
+│   │                    #   Colonnes : Prestation | Qté | Unité | PU HT | [TVA] | Total HT
+│   │                    #   Bascule modèle Moderne ↔ Pro en direct → onUpdate → PDF/Word
+│   │                    #   TOTAL TTC / HT éditable : ratio = new/old appliqué à chaque PU HT
+│   │                    #   Groupement LOT : headers verts (#E3EDE6/#14532D), sous-totaux
+│   │                    #   Totaux enrichis (T9) : remise / HT net / TVA / TTC / acompte / net
 │   │                    #   onUpdate → propage devis mis à jour à page.tsx (pour PDF/Word)
 │   │
 │   ├── PdfExportButton.tsx   # Bouton export PDF
 │   └── WordExportButton.tsx  # Bouton export Word (.docx)
 │
 └── lib/
-    ├── api.ts           # generateQuote, exportToPdf (application/octet-stream), exportToWord
-    └── types.ts         # ⚠️ Miroir EXACT des modèles Pydantic — toujours synchroniser
-                         #   TotauxDevis  : total_ht, total_tva, total_ttc,
-                         #                  remise_ht?, total_ht_net?, net_a_payer?
-                         #   Devis        : + numero_document?, remise_type?,
-                         #                  remise_valeur?, acompte?
-                         #   QuoteRequest : + numero_document?, remise_type?,
-                         #                  remise_valeur?, acompte?
+    ├── api.ts           # generateQuote, exportToPdf, exportToWord
+    └── types.ts         # Miroir EXACT des modèles Pydantic — toujours synchroniser
+                         #   Devis        : + modele?: string | null
+                         #   QuoteRequest : + modele?: string
 ```
 
 ---
@@ -171,15 +181,16 @@ frontend/src/
 
 ```
 [QuoteForm]
-  ↓ QuoteRequest (description + artisan_* + numero_document + remise + acompte)
+  ↓ QuoteRequest (description + artisan_* + numero_document + remise + acompte + modele)
 [Backend /quotes/generate]
   ↓ Prompt Claude (description + région + prix artisan) — SANS infos sensibles
 [Claude API — Tool Use]
   ↓ JSON brut (lignes, totaux, mentions)
 [claude_service.py — injection post-Claude]
-  ↓ Devis complet (+ adresse, logo, iban, bic, numero_document, remise, acompte)
+  ↓ Devis complet (+ adresse, logo, iban, bic, numero_document, remise, acompte, modele)
 [QuotePreview] ← résultat affiché, éditable inline
-[PDF/Word export] ← envoie le Devis complet au backend
+  ↓ bascule modèle Moderne/Pro → onUpdate → page.tsx setResult
+[PDF/Word export] ← envoie le Devis complet (avec devis.modele) au backend
 ```
 
 ---
@@ -201,13 +212,21 @@ frontend/src/
 | 11 | Prompt IA détaillé (DTU, normes, 5–10 lignes) | `prompts.py` |
 | 12 | Layout large max-w-5xl | `page.tsx` |
 | 13 | Infos entreprise complètes + persistance localStorage | `QuoteForm.tsx` |
-| 14 | Logo artisan (PDF h=38 mm côte-à-côte, Word Cm(4.5)) | `pdf_service.py`, `word_service.py` |
+| 14 | Logo artisan (aspect ratio préservé, PDF max 38×28 mm, Word max 4×2.5 cm) | `pdf_service.py`, `word_service.py` |
 | 15 | Groupement par LOT (PDF + Word + aperçu) | tous les services |
 | 16 | Pagination PDF multi-pages propre | `pdf_service.py` |
 | 17 | Validation saisie artisan (SIRET, IBAN, BIC, email, CP) | `QuoteForm.tsx` |
 | 18 | Numéro de document (DEV-…, FAC-…) | `quote.py`, `claude_service.py`, PDF, Word |
-| 19 | Dropdown 9 groupes prestations BTP | `QuoteForm.tsx` |
+| 19 | Dropdown custom 9 groupes prestations BTP (fermeture clic extérieur) | `QuoteForm.tsx` |
 | 20 | Remise (% / montant fixe) + acompte + net à payer | tous les fichiers |
+| 21 | Palette verte premium #14532D + Inter | `globals.css`, `layout.tsx` |
+| 22 | QuoteForm redesign : accordéons, badge Enregistré, dropdown custom | `QuoteForm.tsx` |
+| 23 | Champ `modele` ("moderne"\|"pro") dans Devis + QuoteRequest | `quote.py`, `types.ts`, `claude_service.py` |
+| 24 | 2 modèles PDF : moderne (vert, Helvetica) et pro (anthracite, Times) | `pdf_service.py` |
+| 25 | 2 modèles Word : moderne (Calibri) et pro (Georgia) | `word_service.py` |
+| 26 | Colonne Unité séparée (PDF, Word, aperçu) | `pdf_service.py`, `word_service.py`, `QuotePreview.tsx` |
+| 27 | TTC éditable dans aperçu (ratio sur tous les PU HT) | `QuotePreview.tsx` |
+| 28 | Bascule modèle Moderne ↔ Pro en direct + sélecteur page | `QuotePreview.tsx`, `page.tsx` |
 
 ---
 
@@ -224,16 +243,19 @@ frontend/src/
 
 | Sujet | Décision / Piège |
 |---|---|
-| **fpdf2 + cp1252** | Helvetica ne supporte que cp1252. La fonction `_safe()` strip les caractères hors-cp1252. `€` (0x80), `é` (0xE9), `°` (0xB0) sont valides. Pas d'espace fine U+202F (0x202F hors cp1252 → crash). |
-| **Logo PDF** | Base64 pur stocké dans `ArtisanInfo.logo_base64`. Frontend envoie `split(",")[1]` du data URL. Largeur fixe `w=38 mm`, texte artisan démarre à `x=57`. |
+| **fpdf2 + cp1252** | Helvetica/Times ne supportent que cp1252. La fonction `_safe()` strip les caractères hors-cp1252. `€` (0x80), `é` (0xE9), `°` (0xB0) sont valides. Pas d'espace fine U+202F. |
+| **Logo PDF** | Base64 pur stocké dans `ArtisanInfo.logo_base64`. PIL (`PIL.Image.open`) pour lire les dimensions et calculer l'aspect ratio. Dimensions bornées à 38×28 mm. `text_x = 125 - text_w`, dynamique selon la largeur réelle du logo. |
+| **Logo Word** | `_logo_dimensions_cm()` avec PIL, borné à 4×2.5 cm. `add_picture(width=Cm(w), height=Cm(h))` pour forcer les deux dimensions sans déformation. |
 | **Logo frontend** | Data URL complet (`data:image/…;base64,…`) dans le state React. Conversion base64 pur dans `doGenerate()`. |
-| **Infos artisan → Claude** | Adresse, logo, IBAN, BIC, numero_document, remise, acompte ne passent **jamais** dans le prompt Claude. Injection dans `claude_service.py` après génération. |
+| **modele** | Injecté post-génération dans `claude_service.py` exactement comme `remise_type`, jamais envoyé à Claude. `pdf_service` et `word_service` lisent `devis.modele` pour choisir la palette/police. |
+| **Infos artisan → Claude** | Adresse, logo, IBAN, BIC, numero_document, remise, acompte, modele ne passent **jamais** dans le prompt Claude. Injection dans `claude_service.py` après génération. |
 | **localStorage + SSR** | `useState` lazy initializer ne doit **pas** accéder à `localStorage` → erreur d'hydratation Next.js. Utiliser `useEffect(() => { … }, [])`. |
-| **PDF Chrome** | Le viewer natif Chrome intercepte les blobs `application/pdf` même avec `download`. Fix : `application/octet-stream` dans `api.ts`. |
-| **Pagination PDF** | `auto_page_break=True` + `multi_cell` → cascade si saut en milieu de ligne (`y_start` obsolète). Fix : `auto_page_break=False` pendant le tableau, sauts gérés manuellement avant chaque ligne. |
+| **PDF Chrome** | Fix : `application/octet-stream` dans `api.ts`. |
+| **Pagination PDF** | `auto_page_break=False` pendant le tableau, sauts gérés manuellement avant chaque ligne. |
 | **Groupement LOT** | `lot: Optional[str]` sur `LigneDevis`. Order-preserving (dict Python / Map JS). Rétrocompatible : `lot=None` → rendu comme avant. |
 | **Remise TVA** | Remise sur HT brut. TVA recalculée : `ratio = total_ht_net / total_ht`, `tva_par_ligne *= ratio`. |
-| **Remise/acompte → Claude** | `remise_type`, `remise_valeur`, `acompte` injectés post-génération, jamais envoyés à Claude. |
+| **TTC éditable** | `ratio = new_ttc / old_ttc` appliqué à chaque `prix_unitaire_ht`. `computeTotaux` recalcule tout. La remise fixe n'est pas rescalée (comportement voulu). |
+| **Colonne Unité** | Séparée de Qté depuis la refonte. PDF with_tva : [34,54,12,13,22,14,31]. Word with_tva : [2.8,5.5,1.0,1.2,2.1,1.5,2.9] cm. |
 
 ---
 
@@ -244,6 +266,5 @@ frontend/src/
 - **Prompts Claude dans `prompts.py` uniquement** — jamais inline dans les services
 - **`lib/types.ts` toujours synchronisé** avec les modèles Pydantic
 - **UX mobile-first** — l'artisan utilise son téléphone sur le chantier
-- **Les infos sensibles ne passent jamais par Claude** — injectées dans `claude_service.py` après génération
+- **Les infos sensibles ne passent jamais par Claude** — injectées dans `claude_service.py` après génération. Le champ `modele` suit la même règle.
 - **Nouvelles dépendances Python** → ajouter dans `requirements.txt` ET installer dans le venv
-- **NE PAS** faire un système de choix entre templates / modèles de documents

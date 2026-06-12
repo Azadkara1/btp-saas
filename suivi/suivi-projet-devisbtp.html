@@ -115,7 +115,7 @@
   <header class="top">
     <div class="brand">
       <h1>Tableau de bord — DevisBTP</h1>
-      <span class="src">source · CLAUDE.md · 11 juin 2026</span>
+      <span class="src">source · CLAUDE.md · 12 juin 2026</span>
       <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. Glisse les cartes entre colonnes ou utilise les flèches. Tout est sauvegardé automatiquement.</p>
     </div>
     <div class="progress-card">
@@ -215,7 +215,7 @@ const TAGS = {
   Bug:  {label:'Bug',      color:'#dc2626'},
 };
 
-// ---- SEED — état au 11 juin 2026 ----
+// ---- SEED — état au 12 juin 2026 ----
 const SEED = {cards:[
 
   // ══════════════════════════════════════════════
@@ -303,6 +303,31 @@ const SEED = {cards:[
   {id:'d26', col:'done', etape:1, tags:['Front','PDF','Word','Back'],
    title:'T9 · Remise et acompte',
    desc:'Remise en % ou montant fixe. TVA recalculée proportionnellement (ratio ht_net/ht_brut). Aperçu : lignes remise, HT net, acompte, NET À PAYER (fond vert). PDF et Word : mêmes lignes.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Refonte UI + 2 modèles (12 juin 2026)
+  // ══════════════════════════════════════════════
+  {id:'d27', col:'done', etape:1, tags:['Front','UX'],
+   title:'Refonte palette verte premium + Inter',
+   desc:'globals.css rewritten : #14532D, #0F3D21, #E3EDE6, #FAFAF7. Inter via next/font/google dans layout.tsx. .btn-primary radius 14px, .card radius 16px, focus ring vert.'},
+  {id:'d28', col:'done', etape:1, tags:['Front','UX'],
+   title:'QuoteForm redesign : dropdown custom + accordéons',
+   desc:'Dropdown PRESTATIONS_BTP (9 groupes) avec clic-extérieur (useRef). Carte "Mon entreprise" accordéon, badge "Enregistré" (localStorage). Sections accordéon : Mes prix, Remise & acompte, Numéro de document.'},
+  {id:'d29', col:'done', etape:1, tags:['Back','Front'],
+   title:'Champ modele ("moderne" | "pro")',
+   desc:'modele?: Optional[str]="moderne" dans Devis + QuoteRequest (Pydantic). Miroir dans lib/types.ts. Injecté post-Claude dans claude_service.py — jamais envoyé à l\'IA.'},
+  {id:'d30', col:'done', etape:1, tags:['PDF'],
+   title:'pdf_service : 2 modèles Moderne + Pro',
+   desc:'Moderne : bandeau plein #14532D, Helvetica, lots fond #E3EDE6 texte vert. Pro : fond blanc, Times, anthracite #1F2937, lots texte bleu acier #3B5573, filets épais. Totaux accent selon modèle.'},
+  {id:'d31', col:'done', etape:1, tags:['Word'],
+   title:'word_service : 2 modèles Moderne + Pro',
+   desc:'Moderne : Calibri, en-tête fond #14532D texte blanc. Pro : Georgia, anthracite, bordure basse épaisse bleu acier. _add_total_accent() avec couleurs selon modèle.'},
+  {id:'d32', col:'done', etape:1, tags:['PDF','Word'],
+   title:'Logo aspect ratio préservé + colonne Unité séparée',
+   desc:'PDF : PIL pour lire pixels → borné 38×28 mm, text_x dynamique. Word : borné 4×2.5 cm, add_picture(width, height). Colonne Unité séparée de Qté (7 colonnes avec TVA, 6 sans).'},
+  {id:'d33', col:'done', etape:1, tags:['Front','UX'],
+   title:'QuotePreview : TTC éditable + bascule modèle',
+   desc:'TTC cliquable → champ inline → ratio = new/old appliqué à tous les PU HT → recalcul total. Boutons Moderne/Pro dans l\'aperçu (onUpdate → page.tsx → PDF/Word). Sélecteur ModelToggle sur page d\'accueil.'},
 
   // ══════════════════════════════════════════════
   //  À FAIRE — Reste Étape 1

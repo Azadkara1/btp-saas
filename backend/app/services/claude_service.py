@@ -87,6 +87,9 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
                 if request.remise_type:    result.devis.remise_type   = request.remise_type
                 if request.remise_valeur:  result.devis.remise_valeur = request.remise_valeur
                 if request.acompte:        result.devis.acompte       = request.acompte
+                result.devis.modele = request.modele or "moderne"
+                if request.client_code_postal: result.devis.client.code_postal = request.client_code_postal
+                if request.client_ville:       result.devis.client.ville       = request.client_ville
             return result
 
         # Claude veut utiliser un outil

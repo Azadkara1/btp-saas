@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+
 export const metadata: Metadata = {
-  title: "DevisBTP — Devis IA pour artisans",
-  description: "Générez vos devis professionnels en 30 secondes grâce à l'IA",
+  title: "DevisBTP — Devis professionnel pour artisans",
+  description: "Générez vos devis professionnels en quelques secondes",
   viewport: "width=device-width, initial-scale=1, maximum-scale=1",
 };
 
@@ -13,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr">
-      <body className="min-h-screen bg-gray-50">
+    <html lang="fr" className={inter.variable}>
+      <body className={`min-h-screen ${inter.className}`} style={{ backgroundColor: "#FAFAF7" }}>
         {children}
       </body>
     </html>
