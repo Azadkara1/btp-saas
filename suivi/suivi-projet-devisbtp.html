@@ -330,14 +330,54 @@ const SEED = {cards:[
    desc:'TTC cliquable → champ inline → ratio = new/old appliqué à tous les PU HT → recalcul total. Boutons Moderne/Pro dans l\'aperçu (onUpdate → page.tsx → PDF/Word). Sélecteur ModelToggle sur page d\'accueil.'},
 
   // ══════════════════════════════════════════════
-  //  À FAIRE — Reste Étape 1
+  //  FAIT — Batch 2 — Fine-tuning (12 juin 2026)
   // ══════════════════════════════════════════════
-  {id:'t01', col:'todo', etape:1, tags:['Bug','IA'],
-   title:'Bug : prix identiques pour tous les postes',
-   desc:'L\'IA retourne parfois le même tarif pour des prestations différentes. Piste : enrichir price_search.py ou forcer la variété dans le prompt (prompts.py).'},
-  {id:'t02', col:'todo', etape:1, tags:['Back'],
-   title:'Numéro de document auto-incrémenté',
-   desc:'Actuellement saisie manuelle uniquement. Compteur persisté en localStorage ou BDD (Étape 2). Distinct de la saisie manuelle.'},
+  {id:'d34', col:'done', etape:1, tags:['PDF'],
+   title:'PDF : correction bloc insécable lot à 1 ligne',
+   desc:'Bloc insécable bandeau+ligne+sous-total pour les lots à 1 ligne. _row_height() utilise col_w[0]. sub_margin=6 si n_lot==1 et show_sub.'},
+  {id:'d35', col:'done', etape:1, tags:['Front'],
+   title:'CP → Ville autocomplete (geo.api.gouv.fr)',
+   desc:'Debounce 400 ms. Si 1 commune → auto-fill silencieux. Si plusieurs → dropdown. Artisan et client. Effacement dropdown sur sélection manuelle.'},
+  {id:'d36', col:'done', etape:1, tags:['Front','PDF','Word'],
+   title:'CP + Ville client dans QuotePreview',
+   desc:'Ligne "CP Ville" sous l\'adresse client dans l\'aperçu (et en en-tête PDF/Word via encadré client).'},
+  {id:'d37', col:'done', etape:1, tags:['IA','Back'],
+   title:'Prix unitaires distincts : diversification',
+   desc:'price_search.py : base étendue à 50+ entrées distinctes. Règle 5 dans prompts.py : PU jamais identiques pour natures fondamentalement différentes. Log dupliqués dans claude_service.py.'},
+  {id:'d38', col:'done', etape:1, tags:['PDF','Word','Back'],
+   title:'validite_jours + conditions_paiement dans modèles',
+   desc:'Champs Optional dans Devis + QuoteRequest. Injectés post-Claude. Formulaire "Paramètres du document" (accordéon). Mentions légales différenciées devis/facture.'},
+  {id:'d39', col:'done', etape:1, tags:['Front'],
+   title:'TTC arrondi — dernière ligne absorbe l\'écart',
+   desc:'commitTtc : après scaling de tous les PU, recalcul du TTC réel. Si diff ≠ 0, ajout à la dernière ligne (÷ quantite × (1+TVA)).'},
+  {id:'d40', col:'done', etape:1, tags:['PDF','Word'],
+   title:'Robustesse PDF/Word : hauteur box + troncature description',
+   desc:'Box client/chantier bornée entre 26 mm et 55 mm. Description chantier tronquée à 500 chars dans PDF, 800 dans Word.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 3 — Passe finale (12 juin 2026)
+  // ══════════════════════════════════════════════
+  {id:'d41', col:'done', etape:1, tags:['PDF'],
+   title:'PDF pagination par sections (LOT insécable)',
+   desc:'Calcul lot_total_h avant dessin. Si ça tient → dessin direct. Si ça tient sur page fraîche → add_page + header. Si lot > page (big_lot) → sauts par ligne avec sub_margin pour coller sous-total.'},
+  {id:'d42', col:'done', etape:1, tags:['PDF'],
+   title:'Footer insécable (mentions + RIB + signature)',
+   desc:'Estimation de hauteur globale du footer. Saut de page si pdf.get_y() + footer_h > ph-15. Mentions légales, RIB et signature toujours sur la même page.'},
+  {id:'d43', col:'done', etape:1, tags:['Front','Back'],
+   title:'Numéro de document libre (sans auto-incrément)',
+   desc:'Champ vide par défaut. Suppression du useEffect auto-incrément et du counter localStorage. Saisie 100% libre.'},
+  {id:'d44', col:'done', etape:1, tags:['Front','PDF','Word','Back'],
+   title:'Validité devis libre (vide = pas de mention)',
+   desc:'validite_jours: Optional[int] = None dans Pydantic + TS. Placeholder "Ex: 30". Vide → aucune mention de validité dans PDF/Word.'},
+  {id:'d45', col:'done', etape:1, tags:['Front'],
+   title:'Chantier éditable inline dans QuotePreview',
+   desc:'État chantierDesc + EditableText multiline. Propagé via onUpdate(_buildDevis) avec chantier: { ...devis.chantier, description: v }.'},
+  {id:'d46', col:'done', etape:1, tags:['Bug','PDF','Word'],
+   title:'Correction bug "Sans TVA" — mentions TVA masquées',
+   desc:'En mode sans TVA : filtrage des mentions contenant "tva" (hors 293 B) dans la boucle final_mentions. Seul "art. 293 B du CGI" apparaît. Corrigé dans PDF et Word.'},
+  {id:'d47', col:'done', etape:1, tags:['Back'],
+   title:'Sécurité : CORS restreint + rate limiting',
+   desc:'CORS : allowed_origin env var (défaut localhost:3000), plus de wildcard *. Rate limiting : 10 req/60s par IP, in-memory dans quotes.py.'},
 
   // ══════════════════════════════════════════════
   //  À FAIRE — Étape 2

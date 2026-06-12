@@ -2,25 +2,33 @@
 
 ## 📍 État du projet — 12 juin 2026
 
-### Étape 1 — MVP (en cours · ~97 % fait)
+### Étape 1 — MVP (en cours · ~100 % fait)
 
-**Tout ce qui est implémenté ✅**
+**Batch 1 (12 juin 2026) ✅**
 Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC, logo artisan, groupement LOT, pagination multi-pages, validation formulaire artisan, numéro de document, dropdown prestations BTP (9 groupes), remise (% ou montant fixe) + acompte, format monétaire français, signature client, mentions légales + RIB.
 
-**Refonte UI + nouvelles fonctionnalités (12 juin 2026) ✅**
-- Palette verte premium (`#14532D`) — globals.css + Inter via next/font/google
-- QuoteForm redesign : dropdown custom PRESTATIONS_BTP groupé, carte « Infos entreprise » (badge « Enregistré »), sections accordéon (Mes prix, Remise, Numéro)
-- Champ `modele` : « moderne » | « pro » — dans Devis + QuoteRequest, injecté post-Claude
-- 2 modèles PDF : moderne (bandeau vert plein, Helvetica) / pro (anthracite, Times, filets)
-- 2 modèles Word : moderne (Calibri, vert) / pro (Georgia, anthracite bleu acier)
-- Logo PDF + Word : aspect ratio préservé (PIL), max 38×28 mm PDF / 4×2.5 cm Word
-- Colonne Unité séparée de Qté (PDF, Word, aperçu)
-- TTC éditable dans QuotePreview (ratio appliqué à chaque PU HT)
-- Bascule modèle Moderne ↔ Pro en direct dans QuotePreview + sélecteur dans page.tsx
+**Batch 2 (12 juin 2026) ✅**
+- Palette verte premium (`#14532D`) + modèles moderne / pro
+- CP → Ville autocomplete via geo.api.gouv.fr (artisan et client)
+- CP + Ville client affichés dans QuotePreview
+- Prix identiques : diversification via `price_search.py` + avertissement log
+- Validité devis (`validite_jours`) + conditions paiement (`conditions_paiement`) dans modèles
+- Mentions légales différenciées devis / facture (+ art. 293 B CGI si sans TVA)
+- TTC arrondi : dernière ligne absorbe l'écart d'arrondi
+- Hauteur box client/chantier bornée à 55 mm, description tronquée à 500 chars
+
+**Batch 3 — Passe finale (12 juin 2026) ✅**
+- **PDF pagination par sections** : LOT complet = bloc insécable (bandeau + lignes + sous-total). Calcul de la hauteur totale avant dessin ; saut de page AVANT le titre si ça ne tient pas.
+- **Footer insécable** : mentions légales + RIB + zone signature calculés ensemble, saut de page si ça ne tient pas.
+- **Numéro de document libre** : champ vide par défaut, sans auto-incrément ni localStorage.
+- **Validité libre** : champ libre (placeholder "Ex: 30"), vide → aucune mention de validité dans le PDF/Word.
+- **Chantier éditable** dans QuotePreview (EditableText multiline, propagé via onUpdate).
+- **Bug sans TVA** : en mode sans TVA, les mentions "TVA X%" sont masquées ; seul art. 293 B CGI est affiché.
+- **CORS restreint** : plus de wildcard `*` ; configurable via `ALLOWED_ORIGIN` env var.
+- **Rate limiting** : 10 requêtes/minute par IP sur `/quotes/generate` (in-memory).
 
 **Ce qui reste à faire ⏳**
-- **Bug prix** : l'IA retourne parfois des tarifs identiques pour plusieurs postes → retravailler `price_search.py` ou le prompt
-- **Numéro de document auto-incrémenté** : actuellement saisie manuelle uniquement
+- Étape 2 : BDD, authentification, abonnements Stripe
 
 ### Étape 2 — Persistance & Monétisation — non commencée
 PostgreSQL, authentification utilisateurs, abonnements Stripe.
@@ -227,15 +235,29 @@ frontend/src/
 | 26 | Colonne Unité séparée (PDF, Word, aperçu) | `pdf_service.py`, `word_service.py`, `QuotePreview.tsx` |
 | 27 | TTC éditable dans aperçu (ratio sur tous les PU HT) | `QuotePreview.tsx` |
 | 28 | Bascule modèle Moderne ↔ Pro en direct + sélecteur page | `QuotePreview.tsx`, `page.tsx` |
+| 29 | CP → Ville autocomplete (geo.api.gouv.fr) artisan + client | `QuoteForm.tsx` |
+| 30 | CP + Ville client dans QuotePreview | `QuotePreview.tsx` |
+| 31 | Prix identiques : diversification `price_search.py` + prompt + log dupliqués | `price_search.py`, `prompts.py`, `claude_service.py` |
+| 32 | `validite_jours` + `conditions_paiement` dans modèles + form + PDF/Word | `quote.py`, `QuoteForm.tsx`, `pdf_service.py`, `word_service.py` |
+| 33 | Mentions légales différenciées devis/facture + art. 293 B CGI | `pdf_service.py`, `word_service.py` |
+| 34 | TTC arrondi — dernière ligne absorbe l'écart | `QuotePreview.tsx` |
+| 35 | PDF pagination par sections (LOT = bloc insécable) | `pdf_service.py` |
+| 36 | Footer insécable (mentions + RIB + signature) | `pdf_service.py` |
+| 37 | Numéro de document libre (sans auto-incrément) | `QuoteForm.tsx` |
+| 38 | Validité libre (vide → pas de mention) | `QuoteForm.tsx`, `quote.py`, `pdf_service.py`, `word_service.py` |
+| 39 | Chantier éditable inline dans QuotePreview | `QuotePreview.tsx` |
+| 40 | Bug sans TVA corrigé (masquage mentions TVA) | `pdf_service.py`, `word_service.py` |
+| 41 | CORS restreint + rate limiting 10 req/min | `main.py`, `config.py`, `quotes.py` |
 
 ---
 
-## Ce qui reste à faire — Étape 1
+## Ce qui reste à faire — Étape 2+
 
 | Priorité | Tâche | Détail |
 |---|---|---|
-| Haute | Bug prix identiques | L'IA retourne parfois le même prix pour tous les postes. Piste : enrichir `price_search.py` ou améliorer le prompt pour forcer la variété. |
-| Basse | Numéro auto-incrémenté | Actuellement : saisie manuelle. Futur : compteur persisté en BDD (Étape 2) ou localStorage. |
+| Haute | BDD PostgreSQL | Persistance des devis, comptes artisans |
+| Haute | Authentification | JWT, sessions, rôles |
+| Haute | Stripe | Abonnements, facturation SaaS |
 
 ---
 
@@ -251,7 +273,10 @@ frontend/src/
 | **Infos artisan → Claude** | Adresse, logo, IBAN, BIC, numero_document, remise, acompte, modele ne passent **jamais** dans le prompt Claude. Injection dans `claude_service.py` après génération. |
 | **localStorage + SSR** | `useState` lazy initializer ne doit **pas** accéder à `localStorage` → erreur d'hydratation Next.js. Utiliser `useEffect(() => { … }, [])`. |
 | **PDF Chrome** | Fix : `application/octet-stream` dans `api.ts`. |
-| **Pagination PDF** | `auto_page_break=False` pendant le tableau, sauts gérés manuellement avant chaque ligne. |
+| **Pagination PDF** | `auto_page_break=False` pendant le tableau. Stratégie : calculer `lot_total_h` (bandeau + lignes + sous-total) AVANT de dessiner. Si ça tient sur la page courante → dessin direct. Si ça tient sur une page fraîche → `add_page()` + header. Si lot > page entière (`big_lot`) → sauts par ligne avec `sub_margin` pour coller la dernière ligne au sous-total. Footer (mentions + RIB + signature) : estimation de hauteur globale, `add_page()` si insuffisant. |
+| **validite_jours** | `Optional[int] = None` dans Pydantic + TypeScript. Vide → aucune mention de validité dans PDF/Word. L'injection post-Claude dans `claude_service.py` respecte `is not None`. |
+| **CORS** | `allowed_origin` dans `Settings` (défaut `http://localhost:3000`). Override via `ALLOWED_ORIGIN` env var. Wildcard `*` uniquement si la valeur est `"*"`. |
+| **Rate limiting** | In-memory dict par IP dans `quotes.py`. 10 requêtes / 60 s. Nettoyage de la fenêtre glissante à chaque appel. Pas de dépendance externe. |
 | **Groupement LOT** | `lot: Optional[str]` sur `LigneDevis`. Order-preserving (dict Python / Map JS). Rétrocompatible : `lot=None` → rendu comme avant. |
 | **Remise TVA** | Remise sur HT brut. TVA recalculée : `ratio = total_ht_net / total_ht`, `tva_par_ligne *= ratio`. |
 | **TTC éditable** | `ratio = new_ttc / old_ttc` appliqué à chaque `prix_unitaire_ht`. `computeTotaux` recalcule tout. La remise fixe n'est pas rescalée (comportement voulu). |

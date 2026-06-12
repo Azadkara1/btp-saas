@@ -175,6 +175,7 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
   const [remiseValeur, setRemiseValeur] = useState<number>(devis.remise_valeur || 0);
   const [acompte, setAcompte]         = useState<number>(devis.acompte || 0);
   const [currentModele, setCurrentModele] = useState<string>(devis.modele || "moderne");
+  const [chantierDesc, setChantierDesc] = useState<string>(devis.chantier.description || "");
 
   // TTC éditable
   const [editingTtc, setEditingTtc] = useState(false);
@@ -198,6 +199,7 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
 
   const _buildDevis = (l: LigneDevis[], rt: string, rv: number, ac: number, mod?: string) => ({
     ...devis,
+    chantier: { ...devis.chantier, description: chantierDesc },
     lignes: l,
     totaux: computeTotaux(l, withTva, rt || null, rv || null, ac || null),
     remise_type:   rt || null,
@@ -308,7 +310,18 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
         )}
         <div className="rounded-xl p-4 bg-amber-50" style={{ borderLeft: "4px solid #F59E0B" }}>
           <div className="text-xs font-semibold uppercase tracking-wide mb-1 text-amber-600">Chantier</div>
-          <div className="text-sm text-gray-700">{devis.chantier.description.substring(0, 120)}…</div>
+          <EditableText
+            value={chantierDesc}
+            onChange={v => {
+              setChantierDesc(v);
+              onUpdate({
+                ..._buildDevis(lignes, remiseType, remiseValeur, acompte),
+                chantier: { ...devis.chantier, description: v },
+              });
+            }}
+            multiline
+            className="text-sm text-gray-700"
+          />
         </div>
       </div>
 

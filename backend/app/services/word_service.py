@@ -255,12 +255,11 @@ def generate_quote_docx(
     _zero_para_spacing(p2)
     _run(p2, f"Date : {doc_date}", size=9, color=COL_INFO if not is_pro else RGBColor(90, 99, 93))
 
-    if document_type == "devis":
-        validite = devis.validite_jours or 30
+    if document_type == "devis" and devis.validite_jours:
         p3 = rc.add_paragraph()
         p3.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         _zero_para_spacing(p3)
-        _run(p3, f"Valable {validite} jours", size=9, color=COL_INFO if not is_pro else RGBColor(90, 99, 93))
+        _run(p3, f"Valable {devis.validite_jours} jours", size=9, color=COL_INFO if not is_pro else RGBColor(90, 99, 93))
 
     if devis.numero_document:
         num_label = "N Facture" if document_type == "facture" else "N Devis"
@@ -557,19 +556,21 @@ def generate_quote_docx(
     sep5 = doc.add_paragraph("─" * 90)
     _zero_para_spacing(sep5)
 
-    # Construire la liste finale des mentions
-    validite_w = devis.validite_jours or 30
+    # Construire la liste finale des mentions (T4 + T6)
+    validite_w = devis.validite_jours  # None si non renseigné
     final_mentions_w = []
     for m in devis.mentions_legales:
         ml = m.lower()
         if "valable" in ml and "jours" in ml:
-            if document_type == "devis":
+            if document_type == "devis" and validite_w:
                 final_mentions_w.append(f"Devis valable {validite_w} jours a compter de la date d'emission")
+        elif not with_tva and "tva" in ml and "293" not in ml:
+            pass  # Masquer mentions TVA en mode sans TVA
         else:
             final_mentions_w.append(m)
 
     if document_type == "devis":
-        if not any("valable" in m.lower() for m in final_mentions_w):
+        if validite_w and not any("valable" in m.lower() for m in final_mentions_w):
             final_mentions_w.insert(0, f"Devis valable {validite_w} jours a compter de la date d'emission")
         if not any("accord" in m.lower() for m in final_mentions_w):
             final_mentions_w.append("Signature du client precedee de la mention 'Bon pour accord'")

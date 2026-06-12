@@ -89,7 +89,7 @@ class Devis(BaseModel):
     remise_valeur: Optional[float] = None
     acompte: Optional[float] = None
     modele: Optional[str] = "moderne"     # "moderne" | "pro" — injecté post-génération, jamais envoyé à Claude
-    validite_jours: Optional[int] = 30   # durée de validité devis (jours)
+    validite_jours: Optional[int] = None  # durée de validité devis (jours) — libre, rien si absent
     conditions_paiement: Optional[str] = None  # ex: "30% à la commande, solde à réception"
 
 
@@ -133,7 +133,7 @@ class QuoteRequest(BaseModel):
     remise_valeur: Optional[float] = None
     acompte: Optional[float] = None
     modele: Optional[str] = "moderne"
-    validite_jours: Optional[int] = 30
+    validite_jours: Optional[int] = None
     conditions_paiement: Optional[str] = None
     prix_personnalises: Optional[List[PrixArtisan]] = Field(
         default=None,

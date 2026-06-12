@@ -215,10 +215,9 @@ def generate_quote_pdf(
     pdf.cell(70, 4, f"Date : {doc_date}", border=0, align="R")
     label_y += 4
 
-    if document_type == "devis":
-        validite = devis.validite_jours or 30
+    if document_type == "devis" and devis.validite_jours:
         pdf.set_xy(LABEL_X, label_y)
-        pdf.cell(70, 4, _safe(f"Valable {validite} jours"), border=0, align="R")
+        pdf.cell(70, 4, _safe(f"Valable {devis.validite_jours} jours"), border=0, align="R")
         label_y += 4
 
     if devis.numero_document:
@@ -375,18 +374,38 @@ def generate_quote_pdf(
     for lot_name, lot_lignes in lot_groups.items():
         n_lot = len(lot_lignes)
 
-        # ── Bandeau de LOT ───────────────────────────────────────────────
-        # Règle : _draw_table_header() uniquement avant une LIGNE DE PRESTATION,
-        # jamais avant un sous-total isolé.
-        # Bloc insécable lot à 1 ligne : bandeau (7) + ligne + sous-total (6).
-        if has_lots and lot_name:
-            first_h = _row_height(_safe(lot_lignes[0].poste), _safe(lot_lignes[0].description))
-            sub_margin = 6 if (n_lot == 1 and show_sub) else 0
-            if pdf.get_y() + 7 + first_h + sub_margin > PAGE_BOT:
-                pdf.add_page()
-                _draw_table_header()  # en-tête avant le bandeau → ordre correct
-            y_lot = pdf.get_y()
+        # ── T1 : LOT = bloc insécable ────────────────────────────────────
+        # Calculer la hauteur totale du lot avant de le dessiner.
+        band_h_lot  = 7 if (has_lots and lot_name) else 0
+        lines_h_tot = sum(
+            _row_height(_safe(l.poste), _safe(l.description)) for l in lot_lignes
+        )
+        sub_h_const = 6 if show_sub else 0
+        lot_total_h = band_h_lot + lines_h_tot + sub_h_const
 
+        # Y de départ d'une page fraîche (après add_page + header)
+        FRESH_TOP     = 23.0
+        available_now = PAGE_BOT - pdf.get_y()
+        fresh_space   = PAGE_BOT - FRESH_TOP
+        fits_now      = lot_total_h <= available_now
+        fits_fresh    = lot_total_h <= fresh_space
+        big_lot       = not fits_fresh  # lot plus grand qu'une page entière
+
+        if not fits_now:
+            if not big_lot:
+                # Le lot entier tient sur une nouvelle page → saut avant titre
+                pdf.add_page()
+                _draw_table_header()
+            else:
+                # Lot trop grand pour une page : saut si le début ne tient pas
+                first_h = _row_height(_safe(lot_lignes[0].poste), _safe(lot_lignes[0].description))
+                if available_now < band_h_lot + first_h:
+                    pdf.add_page()
+                    _draw_table_header()
+
+        # ── Bandeau de LOT ───────────────────────────────────────────────
+        if has_lots and lot_name:
+            y_lot = pdf.get_y()
             if is_pro:
                 pdf.set_xy(15, y_lot + 1)
                 pdf.set_font(FONT, "B", 8.5)
@@ -408,7 +427,7 @@ def generate_quote_pdf(
 
         # ── Lignes ───────────────────────────────────────────────────────
         for i_ligne, ligne in enumerate(lot_lignes):
-            is_last = (i_ligne == n_lot - 1)
+            is_last    = (i_ligne == n_lot - 1)
             montant_ht = round(ligne.quantite * ligne.prix_unitaire_ht, 2)
             pdf.set_text_color(*BLACK)
             pdf.set_font(FONT, "", 8)
@@ -429,12 +448,12 @@ def generate_quote_pdf(
 
             row_h = _row_height(vals[0], vals[1])
 
-            # Bloc insécable dernière ligne + sous-total.
-            # _draw_table_header() : une ligne de prestation suit → correct.
-            sub_h = 6 if (is_last and show_sub) else 0
-            if pdf.get_y() + row_h + sub_h > PAGE_BOT:
-                pdf.add_page()
-                _draw_table_header()
+            # Saut de page individuel uniquement pour les gros lots
+            if big_lot:
+                sub_margin = sub_h_const if is_last else 0
+                if pdf.get_y() + row_h + sub_margin > PAGE_BOT:
+                    pdf.add_page()
+                    _draw_table_header()
 
             y_start = pdf.get_y()
             if row_i % 2 == 1:
@@ -456,7 +475,6 @@ def generate_quote_pdf(
             row_i += 1
 
         # ── Sous-total ───────────────────────────────────────────────────
-        # Jamais de _draw_table_header() ici : aucune ligne de prestation ne suit.
         if show_sub:
             lot_ht    = round(sum(l.quantite * l.prix_unitaire_ht for l in lot_lignes), 2)
             sub_label = _safe(f"Sous-total {lot_name}" if lot_name else "Sous-total")
@@ -554,29 +572,23 @@ def generate_quote_pdf(
 
     pdf.ln(8)
 
-    # ── MENTIONS LÉGALES ──────────────────────────────────────────────
-    pdf.set_draw_color(*BORDER)
-    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
-    pdf.ln(3)
-
-    pdf.set_font(FONT, "", 7)
-    pdf.set_text_color(*P_GRAY if is_pro else (100, 116, 139))
-
-    # Construire la liste finale des mentions (filtrer + enrichir selon type)
-    validite = devis.validite_jours or 30
-    mentions_lower = " ".join(m.lower() for m in devis.mentions_legales)
+    # ── T2 : Préparer les mentions AVANT le saut de page ─────────────
+    # T4 : validite=None → pas de mention de validité
+    # T6 : masquer les mentions TVA en mode "Sans TVA"
+    validite = devis.validite_jours  # None si non renseigné
     final_mentions = []
     for m in devis.mentions_legales:
         ml = m.lower()
         if "valable" in ml and "jours" in ml:
-            if document_type == "devis":
+            if document_type == "devis" and validite:
                 final_mentions.append(f"Devis valable {validite} jours a compter de la date d'emission")
-            # omis pour facture
+        elif not with_tva and "tva" in ml and "293" not in ml:
+            pass  # Masquer les mentions TVA en mode sans TVA
         else:
             final_mentions.append(m)
 
     if document_type == "devis":
-        if not any("valable" in m.lower() for m in final_mentions):
+        if validite and not any("valable" in m.lower() for m in final_mentions):
             final_mentions.insert(0, f"Devis valable {validite} jours a compter de la date d'emission")
         if not any("accord" in m.lower() for m in final_mentions):
             final_mentions.append("Signature du client precedee de la mention 'Bon pour accord'")
@@ -584,11 +596,32 @@ def generate_quote_pdf(
         if not any("retard" in m.lower() or "penalite" in m.lower() for m in final_mentions):
             final_mentions.append(
                 "Tout retard de paiement entraine des penalites de retard au taux legal en vigueur "
-                "majoré de 10 points + indemnite forfaitaire de 40 EUR pour frais de recouvrement"
+                "majore de 10 points + indemnite forfaitaire de 40 EUR pour frais de recouvrement"
             )
 
     if devis.conditions_paiement:
         final_mentions.append(f"Conditions de paiement : {devis.conditions_paiement}")
+
+    # T2 : Estimation de la hauteur du bloc footer → saut de page si besoin
+    has_rib   = bool(devis.artisan.iban or devis.artisan.bic)
+    rib_lines = (1 if devis.artisan.iban else 0) + (1 if devis.artisan.bic else 0)
+    footer_h  = (
+        8                                                 # séparateur + espacement
+        + len(final_mentions) * 4.5                      # mentions (1 ligne ≈ 4 mm)
+        + (4 if not with_tva else 0)                     # art. 293 B
+        + (4 + 4 + rib_lines * 4 + 4 if has_rib else 0) # RIB section
+        + 52                                              # signature (ln10 + 30 mm + marges)
+    )
+    if pdf.get_y() + footer_h > pdf.h - 15:
+        pdf.add_page()
+
+    # ── MENTIONS LÉGALES ──────────────────────────────────────────────
+    pdf.set_draw_color(*BORDER)
+    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+    pdf.ln(3)
+
+    pdf.set_font(FONT, "", 7)
+    pdf.set_text_color(*P_GRAY if is_pro else (100, 116, 139))
 
     for m in final_mentions:
         pdf.cell(0, 4, _safe(f"* {m}"), ln=True)
@@ -598,7 +631,7 @@ def generate_quote_pdf(
         pdf.cell(0, 4, "* TVA non applicable, art. 293 B du CGI", ln=True)
 
     # ── RIB / COORDONNÉES BANCAIRES ──────────────────────────────────
-    if devis.artisan.iban or devis.artisan.bic:
+    if has_rib:
         pdf.ln(4)
         pdf.set_draw_color(*BORDER)
         pdf.line(15, pdf.get_y(), 195, pdf.get_y())
@@ -616,9 +649,6 @@ def generate_quote_pdf(
     # ── ZONE DE SIGNATURE ────────────────────────────────────────────
     pdf.ln(10)
     sig_y = pdf.get_y()
-    if sig_y + 30 > pdf.h - 15:
-        pdf.add_page()
-        sig_y = 20.0
     pdf.set_y(sig_y)
 
     sig_w  = 82.0

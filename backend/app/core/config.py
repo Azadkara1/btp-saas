@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     app_name: str = "BTP SaaS"
     debug: bool = False
     frontend_url: str = "http://localhost:3000"
+    allowed_origin: str = "http://localhost:3000"  # CORS — override via ALLOWED_ORIGIN env var
 
     # ── Étape 2 (à remplir plus tard) ───────────────────────────
     # database_url: str = ""

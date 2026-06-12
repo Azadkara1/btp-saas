@@ -106,7 +106,6 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
     artisan_logo_base64: "",
     client_nom: "", client_adresse: "", client_code_postal: "", client_ville: "",
     numero_document: "",
-    validite_jours: 30,
     conditions_paiement: "",
   };
 
@@ -146,20 +145,7 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
     form.artisan_logo_base64,
   ]);
 
-  // Numéro de document auto-incrémenté (T5)
-  useEffect(() => {
-    try {
-      const year = new Date().getFullYear();
-      const key  = `devisbtp_ctr_${docType}_${year}`;
-      const last = parseInt(localStorage.getItem(key) || "0", 10);
-      const next = last + 1;
-      const prefix = docType === "facture" ? "FAC" : "DEV";
-      setForm(prev => ({
-        ...prev,
-        numero_document: `${prefix}-${year}-${String(next).padStart(3, "0")}`,
-      }));
-    } catch {}
-  }, [docType]);
+  // Numéro de document : champ libre, pas d'auto-incrémentation
 
   // Fermeture du dropdown au clic extérieur
   useEffect(() => {
@@ -233,13 +219,6 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
         modele: modeleFromPage || "moderne",
       });
       if (response.success) {
-        // Incrémenter le compteur de numéro de document
-        try {
-          const year = new Date().getFullYear();
-          const key  = `devisbtp_ctr_${docType}_${year}`;
-          const last = parseInt(localStorage.getItem(key) || "0", 10);
-          localStorage.setItem(key, String(last + 1));
-        } catch {}
         onQuoteGenerated(response);
       } else {
         setError(response.error || "Une erreur est survenue.");
@@ -612,16 +591,19 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
           <Field label="Numéro de document">
             <input name="numero_document" value={form.numero_document ?? ""} onChange={handleChange}
               placeholder="Ex : DEV-2026-001" className="input-field" />
-            <p className="text-xs mt-1" style={{ color: "#7C857F" }}>
-              Pré-rempli automatiquement — modifiable librement.
-            </p>
           </Field>
           {docType === "devis" && (
             <Field label="Validité du devis (jours)">
               <input type="number" name="validite_jours"
-                value={form.validite_jours ?? 30}
-                onChange={e => setForm(prev => ({ ...prev, validite_jours: parseInt(e.target.value) || 30 }))}
-                min="1" max="365" className="input-field" />
+                value={form.validite_jours ?? ""}
+                onChange={e => {
+                  const v = parseInt(e.target.value);
+                  setForm(prev => ({ ...prev, validite_jours: isNaN(v) || v <= 0 ? undefined : v }));
+                }}
+                min="1" max="365" placeholder="Ex: 30" className="input-field" />
+              <p className="text-xs mt-1" style={{ color: "#7C857F" }}>
+                Laisser vide → aucune mention de validité dans le document.
+              </p>
             </Field>
           )}
           <Field label="Conditions de paiement">
