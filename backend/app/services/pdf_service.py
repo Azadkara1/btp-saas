@@ -462,6 +462,7 @@ def generate_quote_pdf(
                 if pdf.get_y() + row_h + sub_margin > PAGE_BOT:
                     pdf.add_page()
                     _draw_table_header()
+                    pdf.set_font(FONT, "", 8)  # _draw_table_header laisse Bold — row_h calculé avec Regular
 
             y_start = pdf.get_y()
             if row_i % 2 == 1:
