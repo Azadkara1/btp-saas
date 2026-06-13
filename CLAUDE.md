@@ -1,8 +1,8 @@
 # CLAUDE.md — Contexte projet BTP SaaS
 
-## 📍 État du projet — 12 juin 2026
+## 📍 État du projet — 13 juin 2026
 
-### Étape 1 — MVP (en cours · ~100 % fait)
+### Étape 1 — MVP ✅ TERMINÉE
 
 **Batch 1 (12 juin 2026) ✅**
 Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC, logo artisan, groupement LOT, pagination multi-pages, validation formulaire artisan, numéro de document, dropdown prestations BTP (9 groupes), remise (% ou montant fixe) + acompte, format monétaire français, signature client, mentions légales + RIB.
@@ -18,17 +18,19 @@ Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC,
 - Hauteur box client/chantier bornée à 55 mm, description tronquée à 500 chars
 
 **Batch 3 — Passe finale (12 juin 2026) ✅**
-- **PDF pagination par sections** : LOT complet = bloc insécable (bandeau + lignes + sous-total). Calcul de la hauteur totale avant dessin ; saut de page AVANT le titre si ça ne tient pas.
-- **Footer insécable** : mentions légales + RIB + zone signature calculés ensemble, saut de page si ça ne tient pas.
-- **Numéro de document libre** : champ vide par défaut, sans auto-incrément ni localStorage.
-- **Validité libre** : champ libre (placeholder "Ex: 30"), vide → aucune mention de validité dans le PDF/Word.
-- **Chantier éditable** dans QuotePreview (EditableText multiline, propagé via onUpdate).
-- **Bug sans TVA** : en mode sans TVA, les mentions "TVA X%" sont masquées ; seul art. 293 B CGI est affiché.
-- **CORS restreint** : plus de wildcard `*` ; configurable via `ALLOWED_ORIGIN` env var.
-- **Rate limiting** : 10 requêtes/minute par IP sur `/quotes/generate` (in-memory).
+- **PDF pagination par sections** : LOT complet = bloc insécable (bandeau + lignes + sous-total).
+- **Footer insécable** : mentions légales + RIB + zone signature.
+- **Numéro de document libre** : champ vide par défaut, sans auto-incrément.
+- **Validité libre** : champ libre, vide → aucune mention de validité dans le PDF/Word.
+- **Chantier éditable** dans QuotePreview (EditableText multiline).
+- **Bug sans TVA** corrigé : mentions "TVA X%" masquées, seul art. 293 B CGI affiché.
+- **CORS restreint** + **Rate limiting** 10 req/min.
 
-**Ce qui reste à faire ⏳**
-- Étape 2 : BDD, authentification, abonnements Stripe
+**Batch 4 — Consolidation & bugfixes (13 juin 2026) ✅**
+- **Fix texte invisible sur lignes prestation** : `_draw_table_header()` et `_tot_row_accent()` laissaient le text_color en blanc après leurs bandeaux → lignes prestation invisibles en cas de saut de page (big_lot) ou après la ligne TTC verte. Ajout de `_set_body()` helper + reset systématique.
+- **Fix CP + Ville client dans PDF et Word** : champ `code_postal` et `ville` absents du schéma JSON du prompt → Claude ne les générait jamais. Ajout dans le schéma client du prompt + passage de ces valeurs dans le message utilisateur si l'artisan les a renseignées.
+- **Consolidation `pdf_service.py`** : constante `MUTED_TEXT` par modèle, helper `_set_body()` (reset texte + trait + épaisseur), remplacement de tous les ternaires inline `P_GRAY if is_pro else (100,116,139)`.
+- **Logging** : trace `[INJECT CLIENT]` dans `claude_service.py`, `[PDF]` et `[WORD]` pour déboguer la chaîne CP/Ville.
 
 ### Étape 2 — Persistance & Monétisation — non commencée
 PostgreSQL, authentification utilisateurs, abonnements Stripe.
@@ -248,6 +250,9 @@ frontend/src/
 | 39 | Chantier éditable inline dans QuotePreview | `QuotePreview.tsx` |
 | 40 | Bug sans TVA corrigé (masquage mentions TVA) | `pdf_service.py`, `word_service.py` |
 | 41 | CORS restreint + rate limiting 10 req/min | `main.py`, `config.py`, `quotes.py` |
+| 42 | CP + Ville client dans PDF et Word (via prompt + injection) | `prompts.py`, `claude_service.py`, `pdf_service.py`, `word_service.py` |
+| 43 | Fix texte invisible sur lignes prestation (reset text_color après bandeaux blancs) | `pdf_service.py` |
+| 44 | Consolidation pdf_service : `MUTED_TEXT`, `_set_body()`, reset systématique | `pdf_service.py` |
 
 ---
 
@@ -270,7 +275,7 @@ frontend/src/
 | **Logo Word** | `_logo_dimensions_cm()` avec PIL, borné à 4×2.5 cm. `add_picture(width=Cm(w), height=Cm(h))` pour forcer les deux dimensions sans déformation. |
 | **Logo frontend** | Data URL complet (`data:image/…;base64,…`) dans le state React. Conversion base64 pur dans `doGenerate()`. |
 | **modele** | Injecté post-génération dans `claude_service.py` exactement comme `remise_type`, jamais envoyé à Claude. `pdf_service` et `word_service` lisent `devis.modele` pour choisir la palette/police. |
-| **Infos artisan → Claude** | Adresse, logo, IBAN, BIC, numero_document, remise, acompte, modele ne passent **jamais** dans le prompt Claude. Injection dans `claude_service.py` après génération. |
+| **Infos artisan → Claude** | Adresse artisan, logo, IBAN, BIC, artisan_code_postal/ville, numero_document, remise, acompte, modele ne passent **jamais** dans le prompt Claude. Injection dans `claude_service.py` après génération. Client nom/adresse/code_postal/ville sont envoyés à Claude (dans le message user) car Claude en a besoin pour générer le JSON client. |
 | **localStorage + SSR** | `useState` lazy initializer ne doit **pas** accéder à `localStorage` → erreur d'hydratation Next.js. Utiliser `useEffect(() => { … }, [])`. |
 | **PDF Chrome** | Fix : `application/octet-stream` dans `api.ts`. |
 | **Pagination PDF** | `auto_page_break=False` pendant le tableau. Stratégie : calculer `lot_total_h` (bandeau + lignes + sous-total) AVANT de dessiner. Si ça tient sur la page courante → dessin direct. Si ça tient sur une page fraîche → `add_page()` + header. Si lot > page entière (`big_lot`) → sauts par ligne avec `sub_margin` pour coller la dernière ligne au sous-total. Footer (mentions + RIB + signature) : estimation de hauteur globale, `add_page()` si insuffisant. |

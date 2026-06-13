@@ -56,7 +56,9 @@ Structure exacte attendue :
 {
   "client": {
     "nom": "string ou null",
-    "adresse": "string ou null"
+    "adresse": "string ou null",
+    "code_postal": "string ou null",
+    "ville": "string ou null"
   },
   "artisan": {
     "nom": "string ou null",

@@ -115,8 +115,8 @@
   <header class="top">
     <div class="brand">
       <h1>Tableau de bord — DevisBTP</h1>
-      <span class="src">source · CLAUDE.md · 12 juin 2026</span>
-      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. Glisse les cartes entre colonnes ou utilise les flèches. Tout est sauvegardé automatiquement.</p>
+      <span class="src">source · CLAUDE.md · 13 juin 2026</span>
+      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. <strong>Étape 1 MVP terminée.</strong> Étape 2 : BDD + Auth + Stripe.</p>
     </div>
     <div class="progress-card">
       <div class="lbl">Avancement global</div>
@@ -277,32 +277,32 @@ const SEED = {cards:[
   //  FAIT — Lot T1–T9 (améliorations UI/PDF/Word)
   // ══════════════════════════════════════════════
   {id:'d18', col:'done', etape:1, tags:['PDF'],
-   title:'T1 · Correction chevauchement logo / nom artisan',
-   desc:'Layout côte-à-côte : logo w=38 mm à x=15, texte artisan démarre à x=57. Géré sans logo aussi.'},
+   title:'Logo PDF : pas de chevauchement avec le nom artisan',
+   desc:'Layout côte-à-côte : logo w=38 mm à x=15, texte artisan démarre juste après. Géré avec ou sans logo.'},
   {id:'d19', col:'done', etape:1, tags:['PDF','Word'],
-   title:'T2 · Coordonnées artisan avec libellés',
+   title:'Coordonnées artisan avec libellés (Adresse, Tél, Mail, Web)',
    desc:'"Adresse : …", "Tél : …", "Mail : …", "Web : …" dans PDF et Word. Seuls les champs remplis sont affichés.'},
   {id:'d20', col:'done', etape:1, tags:['PDF','Word'],
-   title:'T3 · Largeurs de colonnes optimisées',
-   desc:'PDF avec TVA : [36,62,16,22,16,28]. Word : [3.0,6.5,1.3,2.5,1.5,2.2] cm. Plus de place pour Description.'},
+   title:'Colonnes tableau optimisées (plus de place pour la description)',
+   desc:'PDF avec TVA : [36,62,16,22,16,28]. Word : [3.0,6.5,1.3,2.5,1.5,2.2] cm. Colonne Description bien visible.'},
   {id:'d21', col:'done', etape:1, tags:['PDF','Word','Front'],
-   title:'T4 · Format monétaire français',
-   desc:'"10 099,00 €" partout. PDF : _fmt_money() avec espace insécable. Frontend : toLocaleString("fr-FR").'},
+   title:'Format monétaire français partout (10 099,00 €)',
+   desc:'PDF : _fmt_money() avec espace millier et virgule décimale. Frontend : toLocaleString("fr-FR").'},
   {id:'d22', col:'done', etape:1, tags:['PDF','Word','Front'],
-   title:'T5 · Suppression du bloc notes/avertissements',
-   desc:'Le champ devis.notes (SIRET invalide, prose technique) retiré du PDF, Word et aperçu frontend.'},
+   title:'Suppression des notes techniques dans les documents',
+   desc:'Le champ devis.notes (SIRET invalide, texte technique) retiré du PDF, Word et aperçu — le client ne doit pas le voir.'},
   {id:'d23', col:'done', etape:1, tags:['PDF','Word'],
-   title:'T6 · Zone de signature client',
-   desc:'2 encadrés côte-à-côte : "Bon pour accord" (Fait à / Le) + "Signature du client". PDF et Word.'},
+   title:'Zone de signature client (Bon pour accord)',
+   desc:'2 encadrés côte-à-côte en bas du document : "Bon pour accord" (Fait à / Le) + "Signature du client".'},
   {id:'d24', col:'done', etape:1, tags:['Front','PDF','Word','Back'],
-   title:'T7 · Numéro de document saisissable',
-   desc:'Champ libre (DEV-2026-001, FAC-2026-042). Modèle Pydantic + type TS + en-tête PDF/Word. Libellé selon type.'},
+   title:'Numéro de document libre (DEV-2026-001, FAC-2026-042)',
+   desc:'Champ de saisie libre. Affiché en en-tête PDF et Word avec le libellé "N° Devis" ou "N° Facture".'},
   {id:'d25', col:'done', etape:1, tags:['Front'],
-   title:'T8 · Dropdown de prestations BTP',
-   desc:'9 groupes métiers (maçonnerie, charpente, plomberie, électricité, carrelage, menuiserie, peinture, isolation, démolition). Sélection append dans le textarea description.'},
+   title:'Sélecteur de prestations BTP (9 métiers)',
+   desc:'Dropdown avec 9 groupes (maçonnerie, plomberie, électricité, etc.). Sélection ajoute au texte de description.'},
   {id:'d26', col:'done', etape:1, tags:['Front','PDF','Word','Back'],
-   title:'T9 · Remise et acompte',
-   desc:'Remise en % ou montant fixe. TVA recalculée proportionnellement (ratio ht_net/ht_brut). Aperçu : lignes remise, HT net, acompte, NET À PAYER (fond vert). PDF et Word : mêmes lignes.'},
+   title:'Remise (% ou montant fixe) + acompte + NET À PAYER',
+   desc:'Remise déductible du HT brut. TVA recalculée au prorata. Aperçu, PDF et Word affichent : HT net, acompte versé, solde NET À PAYER.'},
 
   // ══════════════════════════════════════════════
   //  FAIT — Refonte UI + 2 modèles (12 juin 2026)
@@ -333,8 +333,8 @@ const SEED = {cards:[
   //  FAIT — Batch 2 — Fine-tuning (12 juin 2026)
   // ══════════════════════════════════════════════
   {id:'d34', col:'done', etape:1, tags:['PDF'],
-   title:'PDF : correction bloc insécable lot à 1 ligne',
-   desc:'Bloc insécable bandeau+ligne+sous-total pour les lots à 1 ligne. _row_height() utilise col_w[0]. sub_margin=6 si n_lot==1 et show_sub.'},
+   title:'PDF : lot à 1 ligne reste avec son sous-total (pas de coupure)',
+   desc:'Quand un lot n\'a qu\'une ligne, le sous-total reste collé à la ligne. sub_margin=6 réservé si show_sub pour éviter un saut entre la ligne et son sous-total.'},
   {id:'d35', col:'done', etape:1, tags:['Front'],
    title:'CP → Ville autocomplete (geo.api.gouv.fr)',
    desc:'Debounce 400 ms. Si 1 commune → auto-fill silencieux. Si plusieurs → dropdown. Artisan et client. Effacement dropdown sur sélection manuelle.'},
@@ -378,6 +378,22 @@ const SEED = {cards:[
   {id:'d47', col:'done', etape:1, tags:['Back'],
    title:'Sécurité : CORS restreint + rate limiting',
    desc:'CORS : allowed_origin env var (défaut localhost:3000), plus de wildcard *. Rate limiting : 10 req/60s par IP, in-memory dans quotes.py.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 4 — Consolidation & bugfixes (13 juin 2026)
+  // ══════════════════════════════════════════════
+  {id:'d48', col:'done', etape:1, tags:['Bug','PDF'],
+   title:'Lignes de prestation avec texte invisible corrigé',
+   desc:'Bug : après un saut de page au milieu d\'un long lot, les lignes suivantes étaient dessinées en blanc sur fond blanc. Cause : _draw_table_header() laissait text_color=blanc. Ajout de _set_body() (reset couleur) à la fin de chaque bandeau blanc.'},
+  {id:'d49', col:'done', etape:1, tags:['Bug','PDF','Word'],
+   title:'CP et Ville du client enfin dans le document PDF et Word',
+   desc:'Bug : code_postal/ville absents du schéma JSON du prompt → Claude ne les générait jamais. Fix : ajout dans le schéma client du prompt + transmission de ces valeurs dans le message si l\'artisan les a renseignées. L\'injection post-Claude reste pour override éventuel.'},
+  {id:'d50', col:'done', etape:1, tags:['Back','PDF'],
+   title:'Consolidation pdf_service : couleurs centralisées + helper reset',
+   desc:'Constante MUTED_TEXT par modèle (remplace les ternaires inline). Helper _set_body() : reset text_color=BLACK + draw_color=BORDER + line_width=0.2. Appelé avant chaque ligne prestation et après chaque bandeau à texte blanc.'},
+  {id:'d51', col:'done', etape:1, tags:['Back'],
+   title:'Logs de traçabilité CP/Ville dans le backend',
+   desc:'Ligne [INJECT CLIENT] dans claude_service.py après injection (req.cp → devis.client.code_postal). Lignes [PDF] et [WORD] au départ de chaque service. Permet de diagnostiquer tout blocage dans la chaîne de données.'},
 
   // ══════════════════════════════════════════════
   //  À FAIRE — Étape 2

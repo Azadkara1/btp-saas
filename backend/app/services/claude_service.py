@@ -131,6 +131,9 @@ def _build_user_message(request: QuoteRequest) -> str:
         parts.append(f"Client : {request.client_nom}")
     if request.client_adresse:
         parts.append(f"Adresse chantier : {request.client_adresse}")
+    cp_ville_client = " ".join(filter(None, [request.client_code_postal, request.client_ville]))
+    if cp_ville_client:
+        parts.append(f"CP/Ville du client : {cp_ville_client}")
 
     parts.append(f"Région pour les prix du marché : {request.region}")
 
