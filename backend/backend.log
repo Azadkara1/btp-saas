@@ -1,0 +1,73 @@
+INFO:     Will watch for changes in these directories: ['C:\\Users\\azadk\\Desktop\\btp-saas\\btp-saas\\backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [15344] using WatchFiles
+INFO:     Started server process [10220]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:62880 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62880 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59130 - "OPTIONS /quotes/generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59130 - "POST /quotes/generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58908 - "OPTIONS /pdf/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58908 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:58908 - "OPTIONS /word/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58908 - "POST /word/export HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app\services\pdf_service.py'. Reloading...
+INFO:     127.0.0.1:53570 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53570 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53570 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53570 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53570 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53748 - "POST /quotes/generate HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10220]
+INFO:     Started server process [31080]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:63031 - "POST /pdf/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58103 - "POST /pdf/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58392 - "POST /pdf/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58305 - "POST /pdf/export HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app\services\pdf_service.py'. Reloading...
+INFO:     127.0.0.1:57184 - "OPTIONS /quotes/generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57184 - "POST /quotes/generate HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for connections to close. (CTRL+C to force quit)
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [31080]
+WARNING:  WatchFiles detected changes in 'app\services\pdf_service.py'. Reloading...
+Process SpawnProcess-3:
+Traceback (most recent call last):
+  File "C:\Users\azadk\AppData\Local\Python\pythoncore-3.11-64\Lib\multiprocessing\process.py", line 314, in _bootstrap
+    self.run()
+  File "C:\Users\azadk\AppData\Local\Python\pythoncore-3.11-64\Lib\multiprocessing\process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\azadk\Desktop\btp-saas\btp-saas\backend\venv\Lib\site-packages\uvicorn\_subprocess.py", line 73, in subprocess_started
+    sys.stdin = os.fdopen(stdin_fileno)
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen os>", line 1031, in fdopen
+  File "<frozen codecs>", line 309, in __init__
+KeyboardInterrupt
+INFO:     Started server process [12072]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:55143 - "OPTIONS /pdf/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55143 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53745 - "OPTIONS /word/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53745 - "POST /word/export HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app\services\pdf_service.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [12072]
+INFO:     Started server process [32756]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:54387 - "POST /pdf/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60189 - "POST /quotes/generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52138 - "OPTIONS /pdf/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52138 - "POST /pdf/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55987 - "POST /pdf/export HTTP/1.1" 200 OK
