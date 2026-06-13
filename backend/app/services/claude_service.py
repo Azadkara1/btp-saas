@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from collections import Counter
+from typing import Optional
 import anthropic
 from typing import Optional
 
@@ -90,12 +91,19 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
                 if request.remise_valeur:  result.devis.remise_valeur = request.remise_valeur
                 if request.acompte:        result.devis.acompte       = request.acompte
                 result.devis.modele = request.modele or "moderne"
-                if request.client_code_postal: result.devis.client.code_postal = request.client_code_postal
-                if request.client_ville:       result.devis.client.ville       = request.client_ville
+                # Injection CP/Ville client — toujours depuis le formulaire, jamais depuis Claude
+                cp_inj    = (request.client_code_postal or "").strip() or None
+                ville_inj = (request.client_ville or "").strip() or None
+                # Fallback déterministe : regex sur l'adresse si les champs dédiés sont vides
+                if (not cp_inj or not ville_inj) and request.client_adresse:
+                    cp_rx, ville_rx = _extract_cp_ville(request.client_adresse)
+                    if not cp_inj:    cp_inj    = cp_rx
+                    if not ville_inj: ville_inj = ville_rx
+                result.devis.client.code_postal = cp_inj
+                result.devis.client.ville       = ville_inj
                 logging.info(
-                    "[INJECT CLIENT] req.cp=%r req.ville=%r → devis.client.code_postal=%r devis.client.ville=%r",
-                    request.client_code_postal, request.client_ville,
-                    result.devis.client.code_postal, result.devis.client.ville,
+                    "[INJECT CLIENT] form_cp=%r form_ville=%r → injecté cp=%r ville=%r",
+                    request.client_code_postal, request.client_ville, cp_inj, ville_inj,
                 )
                 if request.validite_jours is not None: result.devis.validite_jours = request.validite_jours
                 if request.conditions_paiement: result.devis.conditions_paiement = request.conditions_paiement
@@ -131,11 +139,6 @@ def _build_user_message(request: QuoteRequest) -> str:
         parts.append(f"Client : {request.client_nom}")
     if request.client_adresse:
         parts.append(f"Adresse chantier : {request.client_adresse}")
-    if request.client_code_postal:
-        parts.append(f"Code postal du client : {request.client_code_postal}")
-    if request.client_ville:
-        parts.append(f"Ville du client : {request.client_ville}")
-
     parts.append(f"Région pour les prix du marché : {request.region}")
 
     if request.prix_personnalises:
@@ -172,6 +175,20 @@ async def _handle_tool_calls(content_blocks: list, region: str) -> list:
             })
 
     return tool_results
+
+
+_CP_RE = re.compile(
+    r'\b(\d{5})\s+([A-Za-zÀ-ž][A-Za-zÀ-ž \-]{1,40}?)(?=\s*[,;.\n]|$)',
+    re.IGNORECASE,
+)
+
+
+def _extract_cp_ville(adresse: str) -> tuple[Optional[str], Optional[str]]:
+    """Extrait code postal et ville d'une adresse par regex — aucune IA impliquée."""
+    m = _CP_RE.search(adresse)
+    if m:
+        return m.group(1), m.group(2).strip()
+    return None, None
 
 
 def _parse_final_response(response, total_tokens: int) -> QuoteResponse:
