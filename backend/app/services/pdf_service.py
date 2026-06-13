@@ -350,7 +350,8 @@ def generate_quote_pdf(
         for h, w, a in zip(col_h, col_w, col_a):
             pdf.cell(w, 8, _safe(h), border=0, align=a, fill=True)
         pdf.ln()
-        _set_body()  # ← reset text color — évite le saignement de blanc sur les lignes suivantes
+        _set_body()       # reset text color — évite le saignement de blanc
+        pdf.set_font(FONT, "", 8)  # reset Regular — _draw_table_header laisse Bold
 
     _draw_table_header()
 
@@ -461,14 +462,14 @@ def generate_quote_pdf(
                 sub_margin = sub_h_const if is_last else 0
                 if pdf.get_y() + row_h + sub_margin > PAGE_BOT:
                     pdf.add_page()
-                    _draw_table_header()
-                    pdf.set_font(FONT, "", 8)  # _draw_table_header laisse Bold — row_h calculé avec Regular
+                    _draw_table_header()  # reset text=body + font=Regular intégré
 
             y_start = pdf.get_y()
             if row_i % 2 == 1:
                 pdf.set_fill_color(*LIGHT_GRAY)
                 pdf.rect(15, y_start, W, row_h, "F")
 
+            _set_body()  # défensif : garantit texte foncé juste avant chaque cellule
             for i, (v, w, a, x) in enumerate(zip(vals, col_w, col_a, x_cols)):
                 pdf.set_xy(x, y_start)
                 if i < 2:
