@@ -168,6 +168,8 @@ frontend/src/
 │   │                    #   ⚠️ localStorage dans useEffect uniquement (pas useState)
 │   │
 │   ├── QuotePreview.tsx # Aperçu éditable inline
+│   │                    #   En-tête artisan : nom, SIRET, adresse, CP/ville, tél, email,
+│   │                    #                     site_web, IBAN, BIC (champs conditionnels)
 │   │                    #   Colonnes : Prestation | Qté | Unité | PU HT | [TVA] | Total HT
 │   │                    #   Bascule modèle Moderne ↔ Pro en direct → onUpdate → PDF/Word
 │   │                    #   TOTAL TTC / HT éditable : ratio = new/old appliqué à chaque PU HT
@@ -253,6 +255,7 @@ frontend/src/
 | 42 | CP + Ville client dans PDF et Word (via prompt + injection) | `prompts.py`, `claude_service.py`, `pdf_service.py`, `word_service.py` |
 | 43 | Fix texte invisible sur lignes prestation (reset text_color après bandeaux blancs) | `pdf_service.py` |
 | 44 | Consolidation pdf_service : `MUTED_TEXT`, `_set_body()`, reset systématique | `pdf_service.py` |
+| 45 | Infos entreprise complètes dans l'aperçu (adresse, CP/ville, tél, email, site, IBAN, BIC) | `QuotePreview.tsx` |
 
 ---
 
