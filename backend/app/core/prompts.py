@@ -56,9 +56,9 @@ Structure exacte attendue :
 {
   "client": {
     "nom": "string ou null",
-    "adresse": "string ou null",
-    "code_postal": "string ou null",
-    "ville": "string ou null"
+    "adresse": "string ou null (rue + numéro uniquement — SANS le code postal ni la ville)",
+    "code_postal": "string ou null (extraire depuis l'adresse fournie si elle contient un CP)",
+    "ville": "string ou null (extraire depuis l'adresse fournie si elle contient une ville)"
   },
   "artisan": {
     "nom": "string ou null",
