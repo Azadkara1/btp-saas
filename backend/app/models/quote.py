@@ -80,7 +80,6 @@ class Devis(BaseModel):
     lignes: List[LigneDevis]
     totaux: TotauxDevis
     mentions_legales: List[str] = [
-        "Devis valable 30 jours",
         "TVA applicable selon taux en vigueur"
     ]
     notes: Optional[str] = None

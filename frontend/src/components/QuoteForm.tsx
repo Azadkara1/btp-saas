@@ -90,9 +90,7 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // CP → Ville autocomplete
-  const [clientVilleOptions, setClientVilleOptions]   = useState<string[]>([]);
   const [artisanVilleOptions, setArtisanVilleOptions] = useState<string[]>([]);
-  const clientCpTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const artisanCpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ARTISAN_LS_KEY = "artisan_profile";
@@ -104,7 +102,7 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
     artisan_adresse: "", artisan_code_postal: "", artisan_ville: "",
     artisan_telephone: "", artisan_email: "", artisan_site_web: "",
     artisan_logo_base64: "",
-    client_nom: "", client_adresse: "", client_code_postal: "", client_ville: "",
+    client_nom: "", client_adresse: "",
     numero_document: "",
     conditions_paiement: "",
   };
@@ -460,42 +458,10 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
             <input name="client_nom" value={form.client_nom} onChange={handleChange}
               placeholder="M. Martin" className="input-field" />
           </Field>
-          <Field label="Adresse chantier">
-            <input name="client_adresse" value={form.client_adresse} onChange={handleChange}
-              placeholder="12 rue des Fleurs" className="input-field" />
-          </Field>
-          <Field label="Code postal">
-            <div className="relative">
-              <input name="client_code_postal" value={form.client_code_postal ?? ""}
-                onChange={e => {
-                  handleChange(e);
-                  const cp = e.target.value;
-                  if (clientCpTimer.current) clearTimeout(clientCpTimer.current);
-                  clientCpTimer.current = setTimeout(() => fetchVillesByCp(
-                    cp, setClientVilleOptions,
-                    ville => setForm(prev => ({ ...prev, client_ville: ville })),
-                  ), 400);
-                }}
-                placeholder="69001" className="input-field" />
-              {clientVilleOptions.length > 1 && (
-                <ul className="absolute z-50 w-full bg-white border rounded-xl shadow-md mt-1 max-h-48 overflow-y-auto"
-                  style={{ borderColor: "rgba(20,83,45,0.2)" }}>
-                  {clientVilleOptions.map(v => (
-                    <li key={v}>
-                      <button type="button"
-                        onClick={() => { setForm(prev => ({ ...prev, client_ville: v })); setClientVilleOptions([]); }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-green-50" style={{ color: "#18211C" }}>
-                        {v}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </Field>
-          <Field label="Ville">
-            <input name="client_ville" value={form.client_ville ?? ""} onChange={e => { handleChange(e); setClientVilleOptions([]); }}
-              placeholder="Lyon" className="input-field" />
+          <Field label="Adresse complète">
+            <textarea name="client_adresse" value={form.client_adresse ?? ""} onChange={handleChange}
+              placeholder={"12 rue des Fleurs\n69001 Lyon"} rows={3}
+              className="input-field resize-none" />
           </Field>
         </div>
       </div>

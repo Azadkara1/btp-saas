@@ -94,6 +94,7 @@ def generate_quote_pdf(
     FONT      = "Times" if is_pro else "Helvetica"
     doc_label = "FACTURE" if document_type == "facture" else "DEVIS"
     doc_date  = _fmt_date(document_date)
+    print("[VALIDITE]", devis.validite_jours)
 
     pdf = FPDF(format="A4")
     pdf.core_fonts_encoding = "cp1252"
@@ -270,17 +271,11 @@ def generate_quote_pdf(
     # Hauteur client : header+nom (13mm) + adresse + CP/ville + 2mm marge
     n_client_addr = len(pdf.multi_cell(bw - 3, 4, _safe(devis.client.adresse or ""),
                                        dry_run=True, output="LINES")) if devis.client.adresse else 0
-    n_client_cpv  = 1 if (devis.client.code_postal or devis.client.ville) else 0
-    client_bh     = 13 + n_client_addr * 4 + n_client_cpv * 4 + 2
+    client_bh     = 13 + n_client_addr * 4 + 2
     bh = min(max(26.0, 11 + n_chantier * 4, client_bh), 55.0)  # cap à 55 mm
 
     ACCENT     = M_GREEN if not is_pro else P_STEEL
     MUTED_TEXT = P_GRAY if is_pro else (100, 116, 139)  # texte grisé secondaire
-
-    logging.debug(
-        "[PDF] client.code_postal=%r, client.ville=%r",
-        devis.client.code_postal, devis.client.ville,
-    )
 
     # Encadré Client
     pdf.set_fill_color(*LIGHT_GRAY)
@@ -307,13 +302,6 @@ def generate_quote_pdf(
         pdf.set_text_color(*MUTED_TEXT)
         pdf.multi_cell(bw - 3, 4, _safe(devis.client.adresse))
 
-    cp_ville_client = " ".join(filter(None, [devis.client.code_postal, devis.client.ville]))
-    if cp_ville_client:
-        y_cpv = pdf.get_y() if devis.client.adresse else y_box + 13
-        pdf.set_xy(18, y_cpv)
-        pdf.set_font(FONT, "", 8)
-        pdf.set_text_color(*MUTED_TEXT)
-        pdf.cell(bw - 3, 4, _safe(cp_ville_client))
 
     # Encadré Chantier
     x2 = 15 + bw + 6
@@ -593,7 +581,7 @@ def generate_quote_pdf(
             net = totaux.net_a_payer if totaux.net_a_payer else max(0, ht_base - (devis.acompte or 0))
             _tot_row_accent("NET A PAYER", _fmt_money(net))
 
-    pdf.ln(8)
+    pdf.ln(4)
 
     # ── T2 : Préparer les mentions AVANT le saut de page ─────────────
     # T4 : validite=None → pas de mention de validité
@@ -605,8 +593,8 @@ def generate_quote_pdf(
         if "valable" in ml and "jours" in ml:
             if document_type == "devis" and validite:
                 final_mentions.append(f"Devis valable {validite} jours a compter de la date d'emission")
-        elif not with_tva and "tva" in ml and "293" not in ml:
-            pass  # Masquer les mentions TVA en mode sans TVA
+        elif not with_tva and "tva" in ml:
+            pass  # Masquer toutes les mentions TVA taux en mode sans TVA
         else:
             final_mentions.append(m)
 
@@ -629,11 +617,11 @@ def generate_quote_pdf(
     has_rib   = bool(devis.artisan.iban or devis.artisan.bic)
     rib_lines = (1 if devis.artisan.iban else 0) + (1 if devis.artisan.bic else 0)
     footer_h  = (
-        8                                                 # séparateur + espacement
-        + len(final_mentions) * 4.5                      # mentions (1 ligne ≈ 4 mm)
+        5                                                 # séparateur + espacement
+        + len(final_mentions) * 4                        # mentions (1 ligne ≈ 4 mm)
         + (4 if not with_tva else 0)                     # art. 293 B
         + (4 + 4 + rib_lines * 4 + 4 if has_rib else 0) # RIB section
-        + 52                                              # signature (ln10 + 30 mm + marges)
+        + 34                                              # signature (ln6 + sig_h22 + marges)
     )
     if pdf.get_y() + footer_h > pdf.h - 15:
         pdf.add_page()
@@ -670,12 +658,12 @@ def generate_quote_pdf(
             pdf.cell(0, 4, _safe(f"BIC/SWIFT : {devis.artisan.bic}"), ln=True)
 
     # ── ZONE DE SIGNATURE ────────────────────────────────────────────
-    pdf.ln(10)
+    pdf.ln(6)
     sig_y = pdf.get_y()
     pdf.set_y(sig_y)
 
     sig_w  = 82.0
-    sig_h  = 28.0
+    sig_h  = 22.0
     sig_x2 = 15 + sig_w + 16
 
     pdf.set_draw_color(*BORDER)

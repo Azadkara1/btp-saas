@@ -50,10 +50,6 @@ def generate_quote_docx(
     document_date: Optional[str] = None,
 ) -> bytes:
     """Génère le .docx et retourne les bytes."""
-    logging.debug(
-        "[WORD] client.code_postal=%r, client.ville=%r",
-        devis.client.code_postal, devis.client.ville,
-    )
     try:
         from docx import Document
         from docx.shared import Pt, RGBColor, Cm
@@ -297,11 +293,6 @@ def generate_quote_docx(
         p3 = cc.add_paragraph()
         _zero_para_spacing(p3)
         _run(p3, devis.client.adresse, size=9, color=RGBColor(90, 99, 93))
-    cp_ville_client = " ".join(filter(None, [devis.client.code_postal, devis.client.ville]))
-    if cp_ville_client:
-        p4 = cc.add_paragraph()
-        _zero_para_spacing(p4)
-        _run(p4, cp_ville_client, size=9, color=RGBColor(90, 99, 93))
 
     ch = it.cell(0, 1)
     _set_cell_bg(ch, "FFFBEB")
@@ -569,8 +560,8 @@ def generate_quote_docx(
         if "valable" in ml and "jours" in ml:
             if document_type == "devis" and validite_w:
                 final_mentions_w.append(f"Devis valable {validite_w} jours a compter de la date d'emission")
-        elif not with_tva and "tva" in ml and "293" not in ml:
-            pass  # Masquer mentions TVA en mode sans TVA
+        elif not with_tva and "tva" in ml:
+            pass  # Masquer toutes les mentions TVA taux en mode sans TVA
         else:
             final_mentions_w.append(m)
 

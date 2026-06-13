@@ -92,8 +92,6 @@ export interface QuoteRequest {
   artisan_logo_base64?: string;
   client_nom?: string;
   client_adresse?: string;
-  client_code_postal?: string;
-  client_ville?: string;
   numero_document?: string;
   validite_jours?: number;
   conditions_paiement?: string;

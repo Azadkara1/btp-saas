@@ -84,7 +84,6 @@ Structure exacte attendue :
     "total_ttc": number
   },
   "mentions_legales": [
-    "Devis valable 30 jours",
     "TVA applicable selon taux en vigueur"
   ],
   "notes": "string ou null"

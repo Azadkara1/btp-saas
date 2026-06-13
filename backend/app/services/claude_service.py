@@ -90,16 +90,6 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
                 if request.remise_valeur:  result.devis.remise_valeur = request.remise_valeur
                 if request.acompte:        result.devis.acompte       = request.acompte
                 result.devis.modele = request.modele or "moderne"
-                # Injection CP/ville client — post-génération, TOUJOURS écraser ce que Claude aurait pu produire
-                cp_injecte    = (request.client_code_postal or "").strip() or None
-                ville_injecte = (request.client_ville or "").strip() or None
-                result.devis.client.code_postal = cp_injecte
-                result.devis.client.ville       = ville_injecte
-                logging.info(
-                    "[INJECT CLIENT CP/VILLE] req.cp=%r req.ville=%r → devis.client.code_postal=%r devis.client.ville=%r",
-                    request.client_code_postal, request.client_ville,
-                    result.devis.client.code_postal, result.devis.client.ville,
-                )
                 if request.validite_jours is not None: result.devis.validite_jours = request.validite_jours
                 if request.conditions_paiement: result.devis.conditions_paiement = request.conditions_paiement
                 # Garde-fou : avertir si plusieurs lignes de natures différentes ont le même PU
