@@ -7,6 +7,7 @@ Deux modèles visuels :
   - "pro"             : fond blanc, texte anthracite #1F2937, Times, accents #3B5573
 """
 import base64
+import logging
 from datetime import date as date_class
 from io import BytesIO
 from typing import Optional
@@ -261,7 +262,19 @@ def generate_quote_pdf(
     client_bh     = 13 + n_client_addr * 4 + n_client_cpv * 4 + 2
     bh = min(max(26.0, 11 + n_chantier * 4, client_bh), 55.0)  # cap à 55 mm
 
-    ACCENT = M_GREEN if not is_pro else P_STEEL
+    ACCENT     = M_GREEN if not is_pro else P_STEEL
+    MUTED_TEXT = P_GRAY if is_pro else (100, 116, 139)  # texte grisé secondaire
+
+    def _set_body() -> None:
+        """Remet text+draw à leurs valeurs neutres — évite tout 'saignement' de blanc."""
+        pdf.set_text_color(*BLACK)
+        pdf.set_draw_color(*BORDER)
+        pdf.set_line_width(0.2)
+
+    logging.debug(
+        "[PDF] client.code_postal=%r, client.ville=%r",
+        devis.client.code_postal, devis.client.ville,
+    )
 
     # Encadré Client
     pdf.set_fill_color(*LIGHT_GRAY)
@@ -285,7 +298,7 @@ def generate_quote_pdf(
     if devis.client.adresse:
         pdf.set_xy(18, y_box + 13)
         pdf.set_font(FONT, "", 8)
-        pdf.set_text_color(*P_GRAY if is_pro else (100, 116, 139))
+        pdf.set_text_color(*MUTED_TEXT)
         pdf.multi_cell(bw - 3, 4, _safe(devis.client.adresse))
 
     cp_ville_client = " ".join(filter(None, [devis.client.code_postal, devis.client.ville]))
@@ -293,7 +306,7 @@ def generate_quote_pdf(
         y_cpv = pdf.get_y() if devis.client.adresse else y_box + 13
         pdf.set_xy(18, y_cpv)
         pdf.set_font(FONT, "", 8)
-        pdf.set_text_color(*P_GRAY if is_pro else (100, 116, 139))
+        pdf.set_text_color(*MUTED_TEXT)
         pdf.cell(bw - 3, 4, _safe(cp_ville_client))
 
     # Encadré Chantier
@@ -344,6 +357,7 @@ def generate_quote_pdf(
         for h, w, a in zip(col_h, col_w, col_a):
             pdf.cell(w, 8, _safe(h), border=0, align=a, fill=True)
         pdf.ln()
+        _set_body()  # ← reset text color — évite le saignement de blanc sur les lignes suivantes
 
     _draw_table_header()
 
@@ -429,7 +443,7 @@ def generate_quote_pdf(
         for i_ligne, ligne in enumerate(lot_lignes):
             is_last    = (i_ligne == n_lot - 1)
             montant_ht = round(ligne.quantite * ligne.prix_unitaire_ht, 2)
-            pdf.set_text_color(*BLACK)
+            _set_body()  # toujours forcer la couleur corps avant chaque ligne prestation
             pdf.set_font(FONT, "", 8)
 
             if with_tva:
@@ -485,7 +499,7 @@ def generate_quote_pdf(
             pdf.rect(15, y_sub, W, 6, "F")
             pdf.set_xy(15, y_sub)
             pdf.set_font(FONT, "BI" if not is_pro else "I", 7.5)
-            pdf.set_text_color(*P_GRAY if is_pro else (100, 116, 139))
+            pdf.set_text_color(*MUTED_TEXT)
             pdf.cell(sum(col_w[:-1]), 6, sub_label, border=0, align="R")
             pdf.set_font(FONT, "B", 8)
             pdf.set_text_color(*BLACK)
@@ -512,7 +526,7 @@ def generate_quote_pdf(
         border = "TB" if first else "B"
         pdf.set_xy(tot_x, pdf.get_y())
         pdf.set_font(FONT, "", 9)
-        pdf.set_text_color(*P_GRAY if is_pro else (100, 116, 139))
+        pdf.set_text_color(*MUTED_TEXT)
         pdf.set_draw_color(*BORDER)
         pdf.cell(35, 7, label, border=border, fill=True)
         pdf.set_font(FONT, "B", 9)
@@ -540,6 +554,7 @@ def generate_quote_pdf(
             pdf.cell(30, 9, value_str, border=0, align="R", fill=True)
             pdf.set_fill_color(*LIGHT_GRAY)
         pdf.ln()
+        _set_body()  # ← reset après texte blanc (mode moderne) — évite le saignement
 
     if with_tva:
         ht_label = "Total HT brut" if has_remise else "Total HT"
@@ -621,7 +636,7 @@ def generate_quote_pdf(
     pdf.ln(3)
 
     pdf.set_font(FONT, "", 7)
-    pdf.set_text_color(*P_GRAY if is_pro else (100, 116, 139))
+    pdf.set_text_color(*MUTED_TEXT)
 
     for m in final_mentions:
         pdf.cell(0, 4, _safe(f"* {m}"), ln=True)
@@ -664,7 +679,7 @@ def generate_quote_pdf(
     pdf.set_text_color(*ACCENT)
     pdf.cell(sig_w - 4, 5, "Bon pour accord", border=0)
     pdf.set_font(FONT, "", 7.5)
-    pdf.set_text_color(*P_GRAY if is_pro else (100, 116, 139))
+    pdf.set_text_color(*MUTED_TEXT)
     pdf.set_xy(17, sig_y + 9)
     pdf.cell(sig_w - 4, 4, _safe("Fait a : _________________________________"), border=0)
     pdf.set_xy(17, sig_y + 14)

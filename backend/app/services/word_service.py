@@ -7,6 +7,7 @@ Deux modèles visuels :
   - "pro"             : fond blanc, anthracite #1F2937, Georgia, lots bleu acier #3B5573
 """
 import base64
+import logging
 from datetime import date as date_class
 from typing import Optional
 from io import BytesIO
@@ -49,6 +50,10 @@ def generate_quote_docx(
     document_date: Optional[str] = None,
 ) -> bytes:
     """Génère le .docx et retourne les bytes."""
+    logging.debug(
+        "[WORD] client.code_postal=%r, client.ville=%r",
+        devis.client.code_postal, devis.client.ville,
+    )
     try:
         from docx import Document
         from docx.shared import Pt, RGBColor, Cm

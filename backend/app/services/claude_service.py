@@ -92,6 +92,11 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
                 result.devis.modele = request.modele or "moderne"
                 if request.client_code_postal: result.devis.client.code_postal = request.client_code_postal
                 if request.client_ville:       result.devis.client.ville       = request.client_ville
+                logging.info(
+                    "[INJECT CLIENT] req.cp=%r req.ville=%r → devis.client.code_postal=%r devis.client.ville=%r",
+                    request.client_code_postal, request.client_ville,
+                    result.devis.client.code_postal, result.devis.client.ville,
+                )
                 if request.validite_jours is not None: result.devis.validite_jours = request.validite_jours
                 if request.conditions_paiement: result.devis.conditions_paiement = request.conditions_paiement
                 # Garde-fou : avertir si plusieurs lignes de natures différentes ont le même PU
