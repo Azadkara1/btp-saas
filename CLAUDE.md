@@ -32,6 +32,10 @@ Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC,
 - **Consolidation `pdf_service.py`** : constante `MUTED_TEXT` par modèle, helper `_set_body()` (reset texte + trait + épaisseur), remplacement de tous les ternaires inline `P_GRAY if is_pro else (100,116,139)`.
 - **Logging** : trace `[INJECT CLIENT]` dans `claude_service.py`, `[PDF]` et `[WORD]` pour déboguer la chaîne CP/Ville.
 
+**Batch 5 — Correctifs critiques (13 juin 2026) ✅**
+- **Fix texte invisible PDF (définitif)** : `_set_body()` et `_set_white()` déplacés AVANT l'en-tête (ligne ~106) pour être utilisables partout. `_set_body()` maintenant appelé : fin de l'en-tête (après `numero_document`), après chaque bandeau LOT, avant chaque sous-total. Couleur corps par modèle : moderne `#18211C`, pro `#1F2937`. Tous les `set_text_color(*WHITE)` remplacés par `_set_white()` pour la lisibilité.
+- **Fix CP + Ville client (définitif)** : injection post-génération rendue INCONDITIONNELLE dans `claude_service.py` — écrase toujours ce que Claude aurait pu produire, normalise `""` → `None`. Log renommé `[INJECT CLIENT CP/VILLE]`.
+
 ### Étape 2 — Persistance & Monétisation — non commencée
 PostgreSQL, authentification utilisateurs, abonnements Stripe.
 
@@ -256,6 +260,8 @@ frontend/src/
 | 43 | Fix texte invisible sur lignes prestation (reset text_color après bandeaux blancs) | `pdf_service.py` |
 | 44 | Consolidation pdf_service : `MUTED_TEXT`, `_set_body()`, reset systématique | `pdf_service.py` |
 | 45 | Infos entreprise complètes dans l'aperçu (adresse, CP/ville, tél, email, site, IBAN, BIC) | `QuotePreview.tsx` |
+| 46 | Fix définitif texte invisible PDF : `_set_body()` / `_set_white()` avant en-tête, reset LOT + sous-total, couleurs par modèle | `pdf_service.py` |
+| 47 | Fix définitif CP+Ville client : injection inconditionnelle post-Claude, normalisation `""` → None | `claude_service.py` |
 
 ---
 
@@ -278,7 +284,7 @@ frontend/src/
 | **Logo Word** | `_logo_dimensions_cm()` avec PIL, borné à 4×2.5 cm. `add_picture(width=Cm(w), height=Cm(h))` pour forcer les deux dimensions sans déformation. |
 | **Logo frontend** | Data URL complet (`data:image/…;base64,…`) dans le state React. Conversion base64 pur dans `doGenerate()`. |
 | **modele** | Injecté post-génération dans `claude_service.py` exactement comme `remise_type`, jamais envoyé à Claude. `pdf_service` et `word_service` lisent `devis.modele` pour choisir la palette/police. |
-| **Infos artisan → Claude** | Adresse artisan, logo, IBAN, BIC, artisan_code_postal/ville, numero_document, remise, acompte, modele ne passent **jamais** dans le prompt Claude. Injection dans `claude_service.py` après génération. Client nom/adresse/code_postal/ville sont envoyés à Claude (dans le message user) car Claude en a besoin pour générer le JSON client. |
+| **Infos artisan → Claude** | Adresse artisan, logo, IBAN, BIC, artisan_code_postal/ville, numero_document, remise, acompte, modele ne passent **jamais** dans le prompt Claude. Injection dans `claude_service.py` après génération. Client nom/adresse sont envoyés à Claude (message user) pour le JSON client. Client code_postal/ville sont injectés POST-génération de façon INCONDITIONNELLE (écrasent ce que Claude aurait pu produire), normalisant `""` → None. |
 | **localStorage + SSR** | `useState` lazy initializer ne doit **pas** accéder à `localStorage` → erreur d'hydratation Next.js. Utiliser `useEffect(() => { … }, [])`. |
 | **PDF Chrome** | Fix : `application/octet-stream` dans `api.ts`. |
 | **Pagination PDF** | `auto_page_break=False` pendant le tableau. Stratégie : calculer `lot_total_h` (bandeau + lignes + sous-total) AVANT de dessiner. Si ça tient sur la page courante → dessin direct. Si ça tient sur une page fraîche → `add_page()` + header. Si lot > page entière (`big_lot`) → sauts par ligne avec `sub_margin` pour coller la dernière ligne au sous-total. Footer (mentions + RIB + signature) : estimation de hauteur globale, `add_page()` si insuffisant. |

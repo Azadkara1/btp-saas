@@ -103,6 +103,17 @@ def generate_quote_pdf(
 
     W = 180.0  # largeur utile (210 - 2×15 mm)
 
+    # ── Helpers couleur (définis ici pour être utilisables dans tout le corps du PDF) ──
+    def _set_body() -> None:
+        """Remet texte+trait à leurs valeurs corps — évite tout saignement de couleur."""
+        body_color = (24, 33, 28) if not is_pro else (31, 41, 55)
+        pdf.set_text_color(*body_color)
+        pdf.set_draw_color(*BORDER)
+        pdf.set_line_width(0.2)
+
+    def _set_white() -> None:
+        pdf.set_text_color(*WHITE)
+
     # ── EN-TÊTE ──────────────────────────────────────────────────────
     y0     = 15.0
     LOGO_GAP = 4.0
@@ -169,7 +180,7 @@ def generate_quote_pdf(
     if is_pro:
         pdf.set_text_color(*P_ANTHRACITE)
     else:
-        pdf.set_text_color(*WHITE)
+        _set_white()
     pdf.cell(text_w, 7, _safe(devis.artisan.nom or "Votre Entreprise"), border=0)
     left_y += 8
 
@@ -201,7 +212,7 @@ def generate_quote_pdf(
     if is_pro:
         pdf.set_text_color(*P_ANTHRACITE)
     else:
-        pdf.set_text_color(*WHITE)
+        _set_white()
     pdf.cell(70, 10, doc_label, border=0, align="R")
 
     # Date, validité, numéro
@@ -228,8 +239,9 @@ def generate_quote_pdf(
         if is_pro:
             pdf.set_text_color(*P_STEEL)
         else:
-            pdf.set_text_color(*WHITE)
+            _set_white()
         pdf.cell(70, 4, _safe(f"{num_label} : {devis.numero_document}"), border=0, align="R")
+    _set_body()  # reset systématique après fin de l'en-tête (texte blanc peut rester actif)
 
     # Fin du bandeau
     header_bottom = y0 + header_h + 3
@@ -264,12 +276,6 @@ def generate_quote_pdf(
 
     ACCENT     = M_GREEN if not is_pro else P_STEEL
     MUTED_TEXT = P_GRAY if is_pro else (100, 116, 139)  # texte grisé secondaire
-
-    def _set_body() -> None:
-        """Remet text+draw à leurs valeurs neutres — évite tout 'saignement' de blanc."""
-        pdf.set_text_color(*BLACK)
-        pdf.set_draw_color(*BORDER)
-        pdf.set_line_width(0.2)
 
     logging.debug(
         "[PDF] client.code_postal=%r, client.ville=%r",
@@ -351,7 +357,7 @@ def generate_quote_pdf(
             pdf.set_fill_color(*P_STEEL)
         else:
             pdf.set_fill_color(*M_GREEN)
-        pdf.set_text_color(*WHITE)
+        _set_white()
         pdf.set_font(FONT, "B", 8)
         pdf.set_draw_color(*BORDER)
         for h, w, a in zip(col_h, col_w, col_a):
@@ -438,6 +444,7 @@ def generate_quote_pdf(
                 pdf.set_text_color(*M_LOT_TEXT)
                 pdf.cell(W - 2, 4, _safe(lot_name), border=0, align="L", fill=False)
             pdf.set_y(y_lot + 7)
+            _set_body()  # reset après bandeau LOT — évite saignement sur la première ligne
 
         # ── Lignes ───────────────────────────────────────────────────────
         for i_ligne, ligne in enumerate(lot_lignes):
@@ -494,6 +501,7 @@ def generate_quote_pdf(
             sub_label = _safe(f"Sous-total {lot_name}" if lot_name else "Sous-total")
             if pdf.get_y() + 6 > PAGE_BOT:
                 pdf.add_page()
+            _set_body()  # reset avant sous-total
             y_sub = pdf.get_y()
             pdf.set_fill_color(*LIGHT_GRAY)
             pdf.rect(15, y_sub, W, 6, "F")
@@ -548,13 +556,13 @@ def generate_quote_pdf(
             pdf.set_draw_color(*BORDER)
         else:
             pdf.set_fill_color(*M_GREEN)
-            pdf.set_text_color(*WHITE)
+            _set_white()
             pdf.set_font(FONT, "B", 10)
             pdf.cell(35, 9, label, border=0, fill=True)
             pdf.cell(30, 9, value_str, border=0, align="R", fill=True)
             pdf.set_fill_color(*LIGHT_GRAY)
         pdf.ln()
-        _set_body()  # ← reset après texte blanc (mode moderne) — évite le saignement
+        _set_body()  # reset systématique après potentiel texte blanc
 
     if with_tva:
         ht_label = "Total HT brut" if has_remise else "Total HT"
