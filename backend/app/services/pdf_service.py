@@ -94,7 +94,6 @@ def generate_quote_pdf(
     FONT      = "Times" if is_pro else "Helvetica"
     doc_label = "FACTURE" if document_type == "facture" else "DEVIS"
     doc_date  = _fmt_date(document_date)
-    print("[VALIDITE]", devis.validite_jours)
 
     pdf = FPDF(format="A4")
     pdf.core_fonts_encoding = "cp1252"
@@ -489,6 +488,7 @@ def generate_quote_pdf(
             sub_label = _safe(f"Sous-total {lot_name}" if lot_name else "Sous-total")
             if pdf.get_y() + 6 > PAGE_BOT:
                 pdf.add_page()
+                _draw_table_header()  # redessiner l'entête + _set_body() intégré
             _set_body()  # reset avant sous-total
             y_sub = pdf.get_y()
             pdf.set_fill_color(*LIGHT_GRAY)

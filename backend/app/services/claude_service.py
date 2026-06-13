@@ -90,7 +90,7 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
                 if request.remise_valeur:  result.devis.remise_valeur = request.remise_valeur
                 if request.acompte:        result.devis.acompte       = request.acompte
                 result.devis.modele = request.modele or "moderne"
-                if request.validite_jours is not None: result.devis.validite_jours = request.validite_jours
+                result.devis.validite_jours = request.validite_jours  # toujours depuis le formulaire (None si vide)
                 if request.conditions_paiement: result.devis.conditions_paiement = request.conditions_paiement
                 # Garde-fou : avertir si plusieurs lignes de natures différentes ont le même PU
                 pus = [round(l.prix_unitaire_ht, 2) for l in result.devis.lignes]
