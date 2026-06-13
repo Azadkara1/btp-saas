@@ -279,8 +279,17 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
             {devis.artisan.nom || "Votre Entreprise"}
           </h2>
           {devis.artisan.siret && <p className="text-sm" style={{ color: "#5A635D" }}>SIRET : {devis.artisan.siret}</p>}
-          {devis.artisan.iban  && <p className="text-xs" style={{ color: "#7C857F" }}>IBAN : {devis.artisan.iban}</p>}
-          {devis.artisan.bic   && <p className="text-xs" style={{ color: "#7C857F" }}>BIC : {devis.artisan.bic}</p>}
+          {devis.artisan.adresse && <p className="text-sm" style={{ color: "#5A635D" }}>{devis.artisan.adresse}</p>}
+          {(devis.artisan.code_postal || devis.artisan.ville) && (
+            <p className="text-sm" style={{ color: "#5A635D" }}>
+              {[devis.artisan.code_postal, devis.artisan.ville].filter(Boolean).join(" ")}
+            </p>
+          )}
+          {devis.artisan.telephone && <p className="text-sm" style={{ color: "#5A635D" }}>{devis.artisan.telephone}</p>}
+          {devis.artisan.email     && <p className="text-sm" style={{ color: "#5A635D" }}>{devis.artisan.email}</p>}
+          {devis.artisan.site_web  && <p className="text-xs" style={{ color: "#7C857F" }}>{devis.artisan.site_web}</p>}
+          {devis.artisan.iban      && <p className="text-xs" style={{ color: "#7C857F" }}>IBAN : {devis.artisan.iban}</p>}
+          {devis.artisan.bic       && <p className="text-xs" style={{ color: "#7C857F" }}>BIC : {devis.artisan.bic}</p>}
         </div>
         <div className="text-right space-y-2">
           <div className="text-2xl font-black uppercase tracking-tight" style={{ color: "#14532D" }}>
