@@ -262,6 +262,7 @@ frontend/src/
 | 45 | Infos entreprise complètes dans l'aperçu (adresse, CP/ville, tél, email, site, IBAN, BIC) | `QuotePreview.tsx` |
 | 46 | Fix définitif texte invisible PDF : `_set_body()` / `_set_white()` avant en-tête, reset LOT + sous-total, couleurs par modèle | `pdf_service.py` |
 | 47 | Fix définitif CP+Ville client : injection inconditionnelle post-Claude, normalisation `""` → None | `claude_service.py` |
+| 48 | Fix récurrent texte invisible PDF : double garde `_set_body()` + `pdf.set_font(FONT,"",8)` IMMÉDIATEMENT avant la boucle cellules (règle B) | `pdf_service.py` |
 
 ---
 
@@ -295,6 +296,7 @@ frontend/src/
 | **Remise TVA** | Remise sur HT brut. TVA recalculée : `ratio = total_ht_net / total_ht`, `tva_par_ligne *= ratio`. |
 | **TTC éditable** | `ratio = new_ttc / old_ttc` appliqué à chaque `prix_unitaire_ht`. `computeTotaux` recalcule tout. La remise fixe n'est pas rescalée (comportement voulu). |
 | **Colonne Unité** | Séparée de Qté depuis la refonte. PDF with_tva : [34,54,12,13,22,14,31]. Word with_tva : [2.8,5.5,1.0,1.2,2.1,1.5,2.9] cm. |
+| **Texte invisible PDF — bug récurrent** | `fpdf2` : `set_text_color` est un **état global persistant**. Le blanc des bandeaux (`_draw_table_header`, bandeau LOT, `_tot_row_accent`) saigne sur les lignes suivantes si non réinitialisé immédiatement. **3 règles à NE JAMAIS CASSER** lors de toute modification de `pdf_service.py` : (A) `_set_body()` existe et reset text_color + draw_color + line_width ; (B) `_set_body()` + `pdf.set_font(FONT,"",8)` IMMÉDIATEMENT avant la boucle de cellules de chaque ligne prestation (deux appels : en début de loop iter et juste après le rect LIGHT_GRAY) ; (C) `_set_body()` après CHAQUE élément à texte blanc (header, LOT, TTC). |
 
 ---
 
