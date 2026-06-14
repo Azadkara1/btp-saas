@@ -469,7 +469,8 @@ def generate_quote_pdf(
                 pdf.set_fill_color(*LIGHT_GRAY)
                 pdf.rect(15, y_start, W, row_h, "F")
 
-            _set_body()  # défensif : garantit texte foncé juste avant chaque cellule
+            _set_body()             # défensif : garantit texte foncé juste avant chaque cellule
+            pdf.set_font(FONT, "", 8)  # garantit Regular juste avant chaque cellule
             for i, (v, w, a, x) in enumerate(zip(vals, col_w, col_a, x_cols)):
                 pdf.set_xy(x, y_start)
                 if i < 2:
