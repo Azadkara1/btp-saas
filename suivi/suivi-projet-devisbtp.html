@@ -115,7 +115,7 @@
   <header class="top">
     <div class="brand">
       <h1>Tableau de bord — DevisBTP</h1>
-      <span class="src">source · CLAUDE.md · 13 juin 2026</span>
+      <span class="src">source · CLAUDE.md · 14 juin 2026</span>
       <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. <strong>Étape 1 MVP terminée.</strong> Étape 2 : BDD + Auth + Stripe.</p>
     </div>
     <div class="progress-card">
@@ -394,6 +394,26 @@ const SEED = {cards:[
   {id:'d51', col:'done', etape:1, tags:['Back'],
    title:'Logs de traçabilité CP/Ville dans le backend',
    desc:'Ligne [INJECT CLIENT] dans claude_service.py après injection (req.cp → devis.client.code_postal). Lignes [PDF] et [WORD] au départ de chaque service. Permet de diagnostiquer tout blocage dans la chaîne de données.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 5 — Correctifs critiques (13 juin 2026)
+  // ══════════════════════════════════════════════
+  {id:'d52', col:'done', etape:1, tags:['Front'],
+   title:'Infos entreprise complètes dans l\'aperçu (QuotePreview)',
+   desc:'Adresse, CP, ville, tél, email, site web, IBAN, BIC affichés dans l\'en-tête de l\'aperçu. Champs conditionnels (masqués si vides). Cohérence totale avec ce qui s\'imprime dans le PDF/Word.'},
+  {id:'d53', col:'done', etape:1, tags:['Bug','PDF'],
+   title:'Fix définitif texte invisible PDF — _set_body() / _set_white() repositionnés',
+   desc:'Helpers _set_body() et _set_white() déplacés avant l\'en-tête (accessible partout). _set_body() appelé : fin de l\'en-tête, après chaque bandeau LOT, avant chaque sous-total. Couleur corps par modèle : moderne #18211C, pro #1F2937.'},
+  {id:'d54', col:'done', etape:1, tags:['Bug','Back'],
+   title:'Fix définitif CP+Ville client — injection inconditionnelle post-Claude',
+   desc:'Injection rendue INCONDITIONNELLE dans claude_service.py : écrase toujours ce que Claude aurait pu produire, normalise "" → None. Log renommé [INJECT CLIENT CP/VILLE]. Élimine les cas où Claude inventait des valeurs incorrectes.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Fix récurrent texte invisible (14 juin 2026)
+  // ══════════════════════════════════════════════
+  {id:'d55', col:'done', etape:1, tags:['Bug','PDF'],
+   title:'Fix récurrent texte invisible PDF — règle des 3 gardes',
+   desc:'fpdf2 set_text_color est un état GLOBAL PERSISTANT. Le blanc des bandeaux (header, LOT, TTC) saignait sur les lignes prestation. Fix : double appel _set_body() + pdf.set_font(FONT,"",8) IMMÉDIATEMENT avant la boucle de cellules. 3 règles documentées dans CLAUDE.md pour éviter les régressions futures.'},
 
   // ══════════════════════════════════════════════
   //  À FAIRE — Étape 2
