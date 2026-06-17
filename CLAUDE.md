@@ -1,8 +1,8 @@
 # CLAUDE.md — Contexte projet BTP SaaS
 
-## 📍 État du projet — 13 juin 2026
+## 📍 État du projet — 14 juin 2026
 
-### Étape 1 — MVP ✅ TERMINÉE
+### Étape 1 — MVP ✅ TERMINÉE — 🚀 EN PRODUCTION
 
 **Batch 1 (12 juin 2026) ✅**
 Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC, logo artisan, groupement LOT, pagination multi-pages, validation formulaire artisan, numéro de document, dropdown prestations BTP (9 groupes), remise (% ou montant fixe) + acompte, format monétaire français, signature client, mentions légales + RIB.
@@ -35,6 +35,15 @@ Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC,
 **Batch 5 — Correctifs critiques (13 juin 2026) ✅**
 - **Fix texte invisible PDF (définitif)** : `_set_body()` et `_set_white()` déplacés AVANT l'en-tête (ligne ~106) pour être utilisables partout. `_set_body()` maintenant appelé : fin de l'en-tête (après `numero_document`), après chaque bandeau LOT, avant chaque sous-total. Couleur corps par modèle : moderne `#18211C`, pro `#1F2937`. Tous les `set_text_color(*WHITE)` remplacés par `_set_white()` pour la lisibilité.
 - **Fix CP + Ville client (définitif)** : injection post-génération rendue INCONDITIONNELLE dans `claude_service.py` — écrase toujours ce que Claude aurait pu produire, normalise `""` → `None`. Log renommé `[INJECT CLIENT CP/VILLE]`.
+
+**Déploiement production (14 juin 2026) ✅**
+- **Audit sécurité** : aucun `.env` suivi par git, aucune clé en dur dans le code, `ANTHROPIC_API_KEY` lue exclusivement depuis l'env via pydantic-settings.
+- **`NEXT_PUBLIC_API_URL`** : déjà câblé dans `frontend/src/lib/api.ts` avec fallback `localhost:8000` — aucune modification nécessaire.
+- **Pillow** : ajouté dans `requirements.txt` (manquait malgré son usage pour les logos).
+- **Python 3.11.9 sur Render** : `backend/runtime.txt` + `backend/.python-version` (double filet).
+- **Migration modèle** : `claude-sonnet-4-20250514` → `claude-sonnet-4-6` dans `config.py` (modèle déprécié le 15/06/2026).
+- **Backend** : déployé sur **Render** (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`). Variables d'env Render : `ANTHROPIC_API_KEY`, `ALLOWED_ORIGIN`.
+- **Frontend** : déployé sur **Vercel**. Variable d'env Vercel : `NEXT_PUBLIC_API_URL`.
 
 ### Étape 2 — Persistance & Monétisation — non commencée
 PostgreSQL, authentification utilisateurs, abonnements Stripe.
@@ -263,6 +272,11 @@ frontend/src/
 | 46 | Fix définitif texte invisible PDF : `_set_body()` / `_set_white()` avant en-tête, reset LOT + sous-total, couleurs par modèle | `pdf_service.py` |
 | 47 | Fix définitif CP+Ville client : injection inconditionnelle post-Claude, normalisation `""` → None | `claude_service.py` |
 | 48 | Fix récurrent texte invisible PDF : double garde `_set_body()` + `pdf.set_font(FONT,"",8)` IMMÉDIATEMENT avant la boucle cellules (règle B) | `pdf_service.py` |
+| 49 | Audit sécurité pré-déploiement : aucun `.env` suivi, aucune clé en dur, CORS + rate limiting vérifiés | — |
+| 50 | Pillow ajouté aux dépendances (manquait pour les logos PDF/Word) | `requirements.txt` |
+| 51 | Python 3.11.9 fixé sur Render : `runtime.txt` + `.python-version` | `backend/` |
+| 52 | Migration modèle `claude-sonnet-4-20250514` → `claude-sonnet-4-6` (ancien modèle déprécié) | `config.py` |
+| 53 | Déploiement production : backend Render + frontend Vercel | infrastructure |
 
 ---
 
@@ -309,3 +323,4 @@ frontend/src/
 - **UX mobile-first** — l'artisan utilise son téléphone sur le chantier
 - **Les infos sensibles ne passent jamais par Claude** — injectées dans `claude_service.py` après génération. Le champ `modele` suit la même règle.
 - **Nouvelles dépendances Python** → ajouter dans `requirements.txt` ET installer dans le venv
+- **Variables d'env en production** → ne jamais les coder en dur ; les définir dans le dashboard Render (backend) ou Vercel (frontend)

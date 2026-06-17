@@ -116,7 +116,7 @@
     <div class="brand">
       <h1>Tableau de bord — DevisBTP</h1>
       <span class="src">source · CLAUDE.md · 14 juin 2026</span>
-      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. <strong>Étape 1 MVP terminée.</strong> Étape 2 : BDD + Auth + Stripe.</p>
+      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. <strong>🚀 Étape 1 MVP terminée et en production (Render + Vercel).</strong> Étape 2 : BDD + Auth + Stripe.</p>
     </div>
     <div class="progress-card">
       <div class="lbl">Avancement global</div>
@@ -215,7 +215,7 @@ const TAGS = {
   Bug:  {label:'Bug',      color:'#dc2626'},
 };
 
-// ---- SEED — état au 12 juin 2026 ----
+// ---- SEED — état au 14 juin 2026 — EN PRODUCTION ----
 const SEED = {cards:[
 
   // ══════════════════════════════════════════════
@@ -414,6 +414,22 @@ const SEED = {cards:[
   {id:'d55', col:'done', etape:1, tags:['Bug','PDF'],
    title:'Fix récurrent texte invisible PDF — règle des 3 gardes',
    desc:'fpdf2 set_text_color est un état GLOBAL PERSISTANT. Le blanc des bandeaux (header, LOT, TTC) saignait sur les lignes prestation. Fix : double appel _set_body() + pdf.set_font(FONT,"",8) IMMÉDIATEMENT avant la boucle de cellules. 3 règles documentées dans CLAUDE.md pour éviter les régressions futures.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Déploiement production (14 juin 2026)
+  // ══════════════════════════════════════════════
+  {id:'d56', col:'done', etape:1, tags:['Back'],
+   title:'Audit sécurité pré-déploiement',
+   desc:'Vérification : aucun .env suivi par git, aucune clé API en dur, ANTHROPIC_API_KEY lue via pydantic-settings, CORS restreint + rate limiting 10 req/min confirmés. Résultat : SÉCURISÉ.'},
+  {id:'d57', col:'done', etape:1, tags:['Back'],
+   title:'Préparation Render : Pillow + Python 3.11.9',
+   desc:'Pillow>=10.0.0 ajouté à requirements.txt (manquait pour les logos). backend/runtime.txt + backend/.python-version créés pour forcer Python 3.11.9 (double filet anti-régression).'},
+  {id:'d58', col:'done', etape:1, tags:['IA','Back'],
+   title:'Migration modèle claude-sonnet-4-6',
+   desc:'claude-sonnet-4-20250514 renvoyait 404 (déprécié le 15/06/2026). Remplacement par claude-sonnet-4-6 dans config.py. Modèle surchargeable via variable d\'env CLAUDE_MODEL sur Render.'},
+  {id:'d59', col:'done', etape:1, tags:['Back','Front'],
+   title:'🚀 Mise en production — Render + Vercel',
+   desc:'Backend FastAPI déployé sur Render (uvicorn app.main:app --host 0.0.0.0 --port $PORT). Frontend Next.js déployé sur Vercel. Variables d\'env configurées dans les dashboards respectifs. Application fonctionnelle en production.'},
 
   // ══════════════════════════════════════════════
   //  À FAIRE — Étape 2
