@@ -10,7 +10,7 @@ from functools import lru_cache
 class Settings(BaseSettings):
     # ── IA ──────────────────────────────────────────────────────
     anthropic_api_key: str
-    claude_model: str = "claude-sonnet-4-20250514"
+    claude_model: str = "claude-sonnet-4-6"
 
     # ── App ─────────────────────────────────────────────────────
     app_name: str = "BTP SaaS"
