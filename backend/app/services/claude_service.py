@@ -47,6 +47,8 @@ TOOLS = [
     }
 ]
 
+MAX_OUTPUT_TOKENS = 8192  # 4096 était insuffisant pour les gros devis (40+ lignes)
+
 
 async def generate_quote(request: QuoteRequest) -> QuoteResponse:
     """
@@ -57,21 +59,27 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
 
     messages = [{"role": "user", "content": user_message}]
     total_tokens = 0
+    iteration = 0
 
     # ── Boucle agentic Tool Use ──────────────────────────────────
     while True:
+        iteration += 1
         response = client.messages.create(
             model=settings.claude_model,
-            max_tokens=4096,
+            max_tokens=MAX_OUTPUT_TOKENS,
             system=QUOTE_SYSTEM_PROMPT,
             tools=TOOLS,
             messages=messages
         )
 
-        total_tokens += response.usage.input_tokens + response.usage.output_tokens
+        stop       = response.stop_reason
+        out_tokens = response.usage.output_tokens
+        total_tokens += response.usage.input_tokens + out_tokens
+        logging.info("[CLAUDE] iter=%d stop=%s out_tokens=%d total=%d",
+                     iteration, stop, out_tokens, total_tokens)
 
         # Claude a terminé → on parse le JSON
-        if response.stop_reason == "end_turn":
+        if stop == "end_turn":
             result = _parse_final_response(response, total_tokens)
             if result.success and result.devis:
                 a = result.devis.artisan
@@ -90,7 +98,7 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
                 if request.remise_valeur:  result.devis.remise_valeur = request.remise_valeur
                 if request.acompte:        result.devis.acompte       = request.acompte
                 result.devis.modele = request.modele or "moderne"
-                result.devis.validite_jours = request.validite_jours  # toujours depuis le formulaire (None si vide)
+                result.devis.validite_jours = request.validite_jours
                 if request.conditions_paiement: result.devis.conditions_paiement = request.conditions_paiement
                 # Garde-fou : avertir si plusieurs lignes de natures différentes ont le même PU
                 pus = [round(l.prix_unitaire_ht, 2) for l in result.devis.lignes]
@@ -100,16 +108,31 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
             return result
 
         # Claude veut utiliser un outil
-        if response.stop_reason == "tool_use":
+        if stop == "tool_use":
             messages.append({"role": "assistant", "content": response.content})
             tool_results = await _handle_tool_calls(response.content, request.region)
             messages.append({"role": "user", "content": tool_results})
             continue
 
-        # Cas inattendu
+        # Réponse tronquée : JSON incomplet, inutilisable
+        if stop == "max_tokens":
+            logging.error(
+                "[CLAUDE] Réponse tronquée après %d tokens (max=%d) — devis trop volumineux",
+                out_tokens, MAX_OUTPUT_TOKENS
+            )
+            return QuoteResponse(
+                success=False,
+                error=(
+                    "Le devis est trop volumineux pour être généré en une seule fois. "
+                    "Essayez de réduire le nombre de pièces ou de scinder le chantier en deux devis."
+                )
+            )
+
+        # Cas inattendu (ex : stop_reason futur non géré)
+        logging.error("[CLAUDE] stop_reason inattendu : %s", stop)
         break
 
-    return QuoteResponse(success=False, error="Réponse inattendue du modèle.")
+    return QuoteResponse(success=False, error="Une erreur inattendue est survenue, réessayez.")
 
 
 def _build_user_message(request: QuoteRequest) -> str:
@@ -165,6 +188,7 @@ async def _handle_tool_calls(content_blocks: list, region: str) -> list:
 
 def _parse_final_response(response, total_tokens: int) -> QuoteResponse:
     """Parse la réponse finale de Claude en objet Devis."""
+    json_text = None
     try:
         text_content = next(
             (block.text for block in response.content if hasattr(block, "text")),
@@ -172,6 +196,8 @@ def _parse_final_response(response, total_tokens: int) -> QuoteResponse:
         )
 
         if not text_content:
+            logging.error("[CLAUDE] Aucun bloc texte dans la réponse (blocs: %s)",
+                          [getattr(b, "type", "?") for b in response.content])
             return QuoteResponse(success=False, error="Aucun contenu texte dans la réponse.")
 
         clean_text = text_content.strip()
@@ -183,6 +209,7 @@ def _parse_final_response(response, total_tokens: int) -> QuoteResponse:
         # Résiste aux backticks markdown ou texte explicatif ajouté par Claude
         match = re.search(r'\{.*\}', clean_text, re.DOTALL)
         if not match:
+            logging.error("[CLAUDE] Pas de JSON trouvé. Début réponse : %.300s", clean_text)
             return QuoteResponse(success=False, error="Aucun bloc JSON trouvé dans la réponse Claude.")
 
         json_text = match.group(0)
@@ -196,6 +223,9 @@ def _parse_final_response(response, total_tokens: int) -> QuoteResponse:
         )
 
     except json.JSONDecodeError as e:
-        return QuoteResponse(success=False, error=f"Erreur de parsing du devis : {str(e)}")
+        logging.error("[CLAUDE] JSON invalide : %s — extrait : %.300s",
+                      e, json_text[:300] if json_text else "(vide)")
+        return QuoteResponse(success=False, error="Erreur de format dans la réponse de l'IA, réessayez.")
     except Exception as e:
-        return QuoteResponse(success=False, error=f"Erreur de parsing du devis : {str(e)}")
+        logging.error("[CLAUDE] Erreur parsing inattendue : %s", e, exc_info=True)
+        return QuoteResponse(success=False, error="Erreur de génération du devis, réessayez.")

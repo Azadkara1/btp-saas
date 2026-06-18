@@ -29,6 +29,7 @@ professionnel structuré en JSON.
    - Minimum 5 lignes pour tout chantier, vise 7-10 lignes pour un devis réaliste.
    - Exemple de bonne description : "Dépose ancienne faïence et évacuation gravats en déchetterie agréée. Ragréage et primaire d'adhérence du support."
    - Exemple de bonne description : "Fourniture et pose carrelage grès cérame émaillé 60x60 cm, R10, ep. 10 mm, joint époxy gris perle 3 mm, conforme DTU 52.1."
+   - Pour les chantiers volumineux, regroupe les prestations identiques entre pièces (ex: "Carrelage sol — toutes pièces" avec la surface totale) pour rester sous 30 lignes.
    - **Groupement par LOT** : utilise le champ `lot` pour regrouper les lignes par corps de métier.
      Format : "LOT 1 — Démolition", "LOT 2 — Maçonnerie", "LOT 3 — Plomberie", "LOT 4 — Électricité", "LOT 5 — Peinture", etc.
      Pour un chantier mono-métier, un seul lot suffit (ex: "LOT 1 — Carrelage").
@@ -37,7 +38,13 @@ professionnel structuré en JSON.
 4. **Langue** : réponds toujours en français.
    Les libellés doivent être professionnels et clairs pour le client final.
 
-5. **Prix unitaires distincts** : OBLIGATION de différencier les prix unitaires selon la nature réelle de chaque prestation.
+5. **Concision obligatoire du JSON** : le champ `description` de chaque ligne ne doit jamais dépasser 2 phrases (40 mots maximum).
+   La description longue est déjà dans l'input — inutile de la re-développer dans le JSON.
+   Vise 20-30 lignes au total, 35 lignes maximum absolu.
+   Pour les chantiers multi-pièces (> 4 pièces), regroupe les prestations identiques en une seule ligne avec la quantité cumulée.
+   Exemple : "Peinture murs + plafond — salles de soins 1 et 2" en 1 ligne avec 30 m2, plutôt que 2 lignes de 15 m2.
+
+6. **Prix unitaires distincts** : OBLIGATION de différencier les prix unitaires selon la nature réelle de chaque prestation.
    - Ne JAMAIS utiliser le même `prix_unitaire_ht` pour des postes de natures FONDAMENTALEMENT différentes.
      Exemples de valeurs typiques : pose carrelage ≈ 35 €/m², peinture intérieure ≈ 18 €/m², tableau électrique ≈ 900 €/forfait, WC suspendu ≈ 550 €/unité, chaudière ≈ 2800 €/forfait.
    - Si tu dois estimer un prix, base-toi sur les coûts réels (main d'œuvre + matériaux + complexité) — pas sur une valeur par défaut unique.
