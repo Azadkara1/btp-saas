@@ -432,6 +432,29 @@ const SEED = {cards:[
    desc:'Backend FastAPI déployé sur Render (uvicorn app.main:app --host 0.0.0.0 --port $PORT). Frontend Next.js déployé sur Vercel. Variables d\'env configurées dans les dashboards respectifs. Application fonctionnelle en production.'},
 
   // ══════════════════════════════════════════════
+  //  FAIT — Batch 6 — Améliorations éditeur (19 juin 2026)
+  // ══════════════════════════════════════════════
+  {id:'d60', col:'done', etape:1, tags:['Front','Bug'],
+   title:'Fix validite_jours invisible — input inline dans l\'aperçu',
+   desc:'T1 : valeur affichée ET éditable directement dans l\'en-tête du QuotePreview (sous la date). Plus de désynchronisation entre formulaire, aperçu et PDF.'},
+  {id:'d61', col:'done', etape:1, tags:['Front','UX'],
+   title:'Mentions légales + conditions paiement éditables dans QuotePreview',
+   desc:'T2 : chaque mention légale est un EditableText cliquable (multiline) + boutons Ajouter/Supprimer. Bouton "Régénérer les mentions" (amber) pour revenir aux mentions Claude originales. conditions_paiement : input inline. Toutes les modifications propagées via onUpdate.'},
+  {id:'d62', col:'done', etape:1, tags:['Front','UX'],
+   title:'Ajout / suppression de lignes dans QuotePreview',
+   desc:'T3 : bouton "+ Ajouter" par groupe LOT (mode LOT) ou global (mode sans lot). Icône poubelle au hover sur chaque ligne. Au moins 1 ligne conservée. Recalcul automatique des totaux.'},
+  {id:'d63', col:'done', etape:1, tags:['Front','Back','PDF','Word'],
+   title:'quantite Optional : null = "au réel" dans aperçu, PDF et Word',
+   desc:'T4 : quantite: Optional[float] = Field(None, ge=0) dans quote.py. Traité ×1 dans tous les calculs. Aperçu : bouton × pour vider la quantité, affiche "au réel" cliquable. PDF/Word : colonne Qté affiche "au réel". Propagé sur types.ts, pdf_service.py, word_service.py, QuotePreview.tsx.'},
+
+  // ══════════════════════════════════════════════
+  //  À FAIRE — Étape 1 (améliorations en cours)
+  // ══════════════════════════════════════════════
+  {id:'t08', col:'todo', etape:1, tags:['IA','Back','Front'],
+   title:'Import devis/facture existant (PDF ou .docx → QuotePreview)',
+   desc:'Nouvel endpoint POST /quotes/import. PDF : envoyé en bloc document à Claude (lecture native). .docx : texte extrait via python-docx puis envoyé à Claude. Prompt d\'extraction dans prompts.py. Résultat affiché dans QuotePreview éditable. Artisan importé ignoré au profit du profil enregistré.'},
+
+  // ══════════════════════════════════════════════
   //  À FAIRE — Étape 2
   // ══════════════════════════════════════════════
   {id:'t03', col:'todo', etape:2, tags:['BDD'],

@@ -437,21 +437,23 @@ def generate_quote_pdf(
         # ── Lignes ───────────────────────────────────────────────────────
         for i_ligne, ligne in enumerate(lot_lignes):
             is_last    = (i_ligne == n_lot - 1)
-            montant_ht = round(ligne.quantite * ligne.prix_unitaire_ht, 2)
+            _qty = ligne.quantite if ligne.quantite is not None else 1.0
+            montant_ht = round(_qty * ligne.prix_unitaire_ht, 2)
+            qty_str = "au réel" if ligne.quantite is None else f"{ligne.quantite:g}"
             _set_body()  # toujours forcer la couleur corps avant chaque ligne prestation
             pdf.set_font(FONT, "", 8)
 
             if with_tva:
                 vals = [
                     _safe(ligne.poste), _safe(ligne.description),
-                    f"{ligne.quantite:g}", _safe(ligne.unite),
+                    qty_str, _safe(ligne.unite),
                     _fmt_money(ligne.prix_unitaire_ht), f"{ligne.tva_taux:.0f}%",
                     _fmt_money(montant_ht),
                 ]
             else:
                 vals = [
                     _safe(ligne.poste), _safe(ligne.description),
-                    f"{ligne.quantite:g}", _safe(ligne.unite),
+                    qty_str, _safe(ligne.unite),
                     _fmt_money(ligne.prix_unitaire_ht), _fmt_money(montant_ht),
                 ]
 
@@ -487,7 +489,7 @@ def generate_quote_pdf(
 
         # ── Sous-total ───────────────────────────────────────────────────
         if show_sub:
-            lot_ht    = round(sum(l.quantite * l.prix_unitaire_ht for l in lot_lignes), 2)
+            lot_ht    = round(sum((l.quantite if l.quantite is not None else 1.0) * l.prix_unitaire_ht for l in lot_lignes), 2)
             sub_label = _safe(f"Sous-total {lot_name}" if lot_name else "Sous-total")
             if pdf.get_y() + 6 > PAGE_BOT:
                 pdf.add_page()

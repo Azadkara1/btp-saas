@@ -1,6 +1,6 @@
 "use client";
-import { useState, useMemo, Fragment } from "react";
-import { Pencil } from "lucide-react";
+import { useState, useMemo, Fragment, useRef } from "react";
+import { Pencil, Plus, Trash2, RotateCcw } from "lucide-react";
 import { Devis, LigneDevis, TotauxDevis } from "@/lib/types";
 import ModelPicker from "@/components/ModelPicker";
 
@@ -32,6 +32,7 @@ function fmtMoney(amount: number): string {
   return amount.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
 }
 
+// T4 : (l.quantite ?? 1) partout dans les calculs
 function computeTotaux(
   lignes: LigneDevis[],
   withTva: boolean,
@@ -39,7 +40,7 @@ function computeTotaux(
   remise_valeur?: number | null,
   acompte?: number | null,
 ): TotauxDevis {
-  const total_ht = round2(lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire_ht, 0));
+  const total_ht = round2(lignes.reduce((s, l) => s + (l.quantite ?? 1) * l.prix_unitaire_ht, 0));
 
   let remise_ht = 0;
   if (remise_type === "pourcentage" && remise_valeur)
@@ -53,7 +54,7 @@ function computeTotaux(
   if (withTva) {
     const ratio = total_ht > 0 ? total_ht_net / total_ht : 1;
     total_tva = round2(
-      lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire_ht * l.tva_taux / 100, 0) * ratio
+      lignes.reduce((s, l) => s + (l.quantite ?? 1) * l.prix_unitaire_ht * l.tva_taux / 100, 0) * ratio
     );
   }
 
@@ -64,11 +65,15 @@ function computeTotaux(
 
 // ── Cellule texte éditable ──────────────────────────────────────
 function EditableText({
-  value, onChange, className = "", multiline = false,
-}: { value: string; onChange: (v: string) => void; className?: string; multiline?: boolean }) {
+  value, onChange, className = "", multiline = false, allowEmpty = false,
+}: { value: string; onChange: (v: string) => void; className?: string; multiline?: boolean; allowEmpty?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const commit = () => { const v = draft.trim(); if (v) onChange(v); setEditing(false); };
+  const commit = () => {
+    const v = draft.trim();
+    if (v || allowEmpty) onChange(v);
+    setEditing(false);
+  };
   if (editing) {
     if (multiline)
       return <textarea value={draft} autoFocus rows={3}
@@ -111,11 +116,34 @@ function EditableNumber({
 }
 
 // ── Ligne de prestation ─────────────────────────────────────────
+// T3 : onDelete + canDelete ; T4 : quantite null → "au réel"
 function LigneRow({
-  ligne, withTva, onUpdate,
-}: { ligne: LigneDevis; withTva: boolean; onUpdate: (field: string, value: number | string) => void }) {
-  const montantHt = round2(ligne.quantite * ligne.prix_unitaire_ht);
+  ligne, withTva, onUpdate, onDelete, canDelete,
+}: {
+  ligne: LigneDevis;
+  withTva: boolean;
+  onUpdate: (field: string, value: number | string | null) => void;
+  onDelete: () => void;
+  canDelete: boolean;
+}) {
+  const qty = ligne.quantite ?? 1;
+  const montantHt = round2(qty * ligne.prix_unitaire_ht);
   const badge = SOURCE_BADGE[ligne.source_prix] || SOURCE_BADGE.estimation;
+
+  // T4 : édition inline de la quantité avec support null
+  const [editingQty, setEditingQty] = useState(false);
+  const [qtyDraft, setQtyDraft] = useState("");
+
+  const commitQty = () => {
+    const v = parseFloat(qtyDraft);
+    if (!isNaN(v) && v > 0) {
+      onUpdate("quantite", v);
+    } else if (qtyDraft.trim() === "") {
+      onUpdate("quantite", null); // au réel
+    }
+    setEditingQty(false);
+  };
+
   return (
     <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
       {/* Prestation + Description + badges */}
@@ -128,11 +156,44 @@ function LigneRow({
           <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>
           <EditableText value={ligne.lot || "— lot"} onChange={v => onUpdate("lot", v === "— lot" ? "" : v)}
             className="text-xs text-slate-500 bg-slate-100 rounded-full px-2 py-0.5" />
+          {/* T3 : bouton suppression par ligne */}
+          {canDelete && (
+            <button type="button" onClick={onDelete} title="Supprimer cette ligne"
+              className="text-red-300 hover:text-red-500 transition-colors ml-auto">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </td>
-      {/* Quantité */}
+      {/* Quantité — T4 : null = "au réel" */}
       <td className="py-3 px-2 text-center text-sm text-gray-600 whitespace-nowrap">
-        <EditableNumber value={ligne.quantite} onChange={v => onUpdate("quantite", v)} step="0.5" />
+        {editingQty ? (
+          <input type="number" value={qtyDraft} autoFocus min="0" step="0.5"
+            onChange={e => setQtyDraft(e.target.value)}
+            onBlur={commitQty}
+            onKeyDown={e => { if (e.key === "Enter") commitQty(); if (e.key === "Escape") setEditingQty(false); }}
+            placeholder="vide = au réel"
+            className="w-20 border border-blue-400 rounded px-1.5 py-0.5 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+        ) : ligne.quantite === null ? (
+          <button type="button" onClick={() => { setQtyDraft(""); setEditingQty(true); }}
+            title="Cliquer pour définir une quantité (laisser vide = au réel)"
+            className="text-xs text-gray-400 italic hover:text-blue-600 transition-colors px-1 border-b border-dashed border-gray-300">
+            au réel
+          </button>
+        ) : (
+          <div className="flex items-center justify-center gap-0.5">
+            <button type="button" onClick={() => { setQtyDraft(String(ligne.quantite)); setEditingQty(true); }}
+              className="group inline-flex items-center gap-0.5 hover:text-blue-600 rounded px-1 py-0.5 hover:bg-blue-50 transition-colors">
+              <span>{Number.isInteger(ligne.quantite) ? ligne.quantite : ligne.quantite}</span>
+              <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-50" />
+            </button>
+            <button type="button" onClick={() => onUpdate("quantite", null)}
+              title="Passer en 'au réel' (quantité variable)"
+              className="text-gray-300 hover:text-gray-500 transition-colors text-xs leading-none">
+              ×
+            </button>
+          </div>
+        )}
       </td>
       {/* Unité */}
       <td className="py-3 px-2 text-center text-sm text-gray-500 whitespace-nowrap">
@@ -155,11 +216,14 @@ function LigneRow({
           </select>
         </td>
       )}
-      {/* Total HT — back-calcule PU */}
+      {/* Total HT — back-calcule PU HT ; T4 : qty = null → 1 */}
       <td className="py-3 px-2 text-right font-semibold text-gray-900 whitespace-nowrap">
         <div className="flex items-center justify-end gap-0.5">
           <EditableNumber value={montantHt}
-            onChange={newTotal => { if (ligne.quantite > 0) onUpdate("prix_unitaire_ht", round2(newTotal / ligne.quantite)); }}
+            onChange={newTotal => {
+              const q = ligne.quantite ?? 1;
+              if (q > 0) onUpdate("prix_unitaire_ht", round2(newTotal / q));
+            }}
             step="0.01" className="font-semibold" />
           <span className="text-xs text-gray-500">€</span>
         </div>
@@ -170,12 +234,20 @@ function LigneRow({
 
 // ── Composant principal ─────────────────────────────────────────
 export default function QuotePreview({ devis, documentType, withTva, documentDate, onUpdate }: QuotePreviewProps) {
-  const [lignes, setLignes]           = useState<LigneDevis[]>(devis.lignes);
-  const [remiseType, setRemiseType]   = useState<string>(devis.remise_type || "");
+  const [lignes, setLignes]             = useState<LigneDevis[]>(devis.lignes);
+  const [remiseType, setRemiseType]     = useState<string>(devis.remise_type || "");
   const [remiseValeur, setRemiseValeur] = useState<number>(devis.remise_valeur || 0);
-  const [acompte, setAcompte]         = useState<number>(devis.acompte || 0);
+  const [acompte, setAcompte]           = useState<number>(devis.acompte || 0);
   const [currentModele, setCurrentModele] = useState<string>(devis.modele || "moderne");
   const [chantierDesc, setChantierDesc] = useState<string>(devis.chantier.description || "");
+
+  // T1+T2 : état local pour les champs éditables post-génération
+  const [localValiditeJours, setLocalValiditeJours]         = useState<number | null>(devis.validite_jours ?? null);
+  const [localConditionsPaiement, setLocalConditionsPaiement] = useState<string>(devis.conditions_paiement || "");
+  const [localMentions, setLocalMentions]                   = useState<string[]>([...devis.mentions_legales]);
+  const [mentionsEditedByUser, setMentionsEditedByUser]     = useState(false);
+  // Conserve les mentions Claude originales pour le bouton "Régénérer"
+  const originalMentionsRef = useRef<string[]>([...devis.mentions_legales]);
 
   // TTC éditable
   const [editingTtc, setEditingTtc] = useState(false);
@@ -197,19 +269,49 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
     return Array.from(map.values());
   }, [lignes]);
 
+  // _buildDevis inclut désormais tous les champs locaux (T1+T2)
   const _buildDevis = (l: LigneDevis[], rt: string, rv: number, ac: number, mod?: string) => ({
     ...devis,
     chantier: { ...devis.chantier, description: chantierDesc },
     lignes: l,
     totaux: computeTotaux(l, withTva, rt || null, rv || null, ac || null),
-    remise_type:   rt || null,
-    remise_valeur: rv || null,
-    acompte:       ac || null,
-    modele:        mod ?? currentModele,
+    remise_type:          rt || null,
+    remise_valeur:        rv || null,
+    acompte:              ac || null,
+    modele:               mod ?? currentModele,
+    validite_jours:       localValiditeJours,
+    conditions_paiement:  localConditionsPaiement || null,
+    mentions_legales:     localMentions,
   });
 
-  const updateLigne = (index: number, field: string, value: number | string) => {
+  // T4 : field accepte null pour quantite
+  const updateLigne = (index: number, field: string, value: number | string | null) => {
     const updated = lignes.map((l, i) => i === index ? { ...l, [field]: value } : l);
+    setLignes(updated);
+    onUpdate(_buildDevis(updated, remiseType, remiseValeur, acompte));
+  };
+
+  // T3 : ajout d'une ligne (lot = nom du lot cible ou null)
+  const addLigne = (lot: string | null = null) => {
+    const newLigne: LigneDevis = {
+      lot: lot || null,
+      poste: "Nouvelle prestation",
+      description: "À compléter",
+      quantite: 1,
+      unite: "forfait",
+      prix_unitaire_ht: 0,
+      tva_taux: 10,
+      source_prix: "estimation",
+    };
+    const updated = [...lignes, newLigne];
+    setLignes(updated);
+    onUpdate(_buildDevis(updated, remiseType, remiseValeur, acompte));
+  };
+
+  // T3 : suppression d'une ligne (garde au moins 1)
+  const removeLigne = (index: number) => {
+    if (lignes.length <= 1) return;
+    const updated = lignes.filter((_, i) => i !== index);
     setLignes(updated);
     onUpdate(_buildDevis(updated, remiseType, remiseValeur, acompte));
   };
@@ -236,6 +338,45 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
     onUpdate(_buildDevis(lignes, remiseType, remiseValeur, acompte, m));
   };
 
+  // T2 : handlers champs éditables — override après _buildDevis car closure a l'ancienne valeur
+  const handleValiditeJours = (val: number | null) => {
+    setLocalValiditeJours(val);
+    onUpdate({ ..._buildDevis(lignes, remiseType, remiseValeur, acompte), validite_jours: val });
+  };
+
+  const handleConditionsPaiement = (val: string) => {
+    setLocalConditionsPaiement(val);
+    onUpdate({ ..._buildDevis(lignes, remiseType, remiseValeur, acompte), conditions_paiement: val || null });
+  };
+
+  const handleMentionChange = (index: number, value: string) => {
+    const updated = localMentions.map((m, i) => i === index ? value : m);
+    setLocalMentions(updated);
+    setMentionsEditedByUser(true);
+    onUpdate({ ..._buildDevis(lignes, remiseType, remiseValeur, acompte), mentions_legales: updated });
+  };
+
+  const handleAddMention = () => {
+    const updated = [...localMentions, "Nouvelle mention légale"];
+    setLocalMentions(updated);
+    setMentionsEditedByUser(true);
+    onUpdate({ ..._buildDevis(lignes, remiseType, remiseValeur, acompte), mentions_legales: updated });
+  };
+
+  const handleRemoveMention = (index: number) => {
+    const updated = localMentions.filter((_, i) => i !== index);
+    setLocalMentions(updated);
+    setMentionsEditedByUser(true);
+    onUpdate({ ..._buildDevis(lignes, remiseType, remiseValeur, acompte), mentions_legales: updated });
+  };
+
+  const handleRegenerMentions = () => {
+    const orig = [...originalMentionsRef.current];
+    setLocalMentions(orig);
+    setMentionsEditedByUser(false);
+    onUpdate({ ..._buildDevis(lignes, remiseType, remiseValeur, acompte), mentions_legales: orig });
+  };
+
   // Valeur TTC / HT courante affichée dans le bandeau principal
   const currentTtcDisplay = withTva ? totaux.total_ttc : (totaux.total_ht_net ?? totaux.total_ht);
 
@@ -247,18 +388,20 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
       ...l,
       prix_unitaire_ht: round2(l.prix_unitaire_ht * ratio),
     }));
-    // Ajuster la dernière ligne pour absorber l'écart d'arrondi centimes
+    // Absorber l'écart d'arrondi centimes sur la dernière ligne
     const scaledTotaux = computeTotaux(scaled, withTva, remiseType || null, remiseValeur || null, acompte || null);
     const actual = withTva ? scaledTotaux.total_ttc : (scaledTotaux.total_ht_net ?? scaledTotaux.total_ht);
     const diff = round2(newTtc - actual);
     if (diff !== 0 && scaled.length > 0) {
       const lastIdx = scaled.length - 1;
       const last = scaled[lastIdx];
-      if (last.quantite > 0) {
+      // T4 : quantite null → 1 pour l'ajustement
+      const q = last.quantite ?? 1;
+      if (q > 0) {
         const tvaMult = withTva ? (1 + last.tva_taux / 100) : 1;
         scaled[lastIdx] = {
           ...last,
-          prix_unitaire_ht: round2(last.prix_unitaire_ht + diff / (last.quantite * tvaMult)),
+          prix_unitaire_ht: round2(last.prix_unitaire_ht + diff / (q * tvaMult)),
         };
       }
     }
@@ -278,8 +421,8 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
           <h2 className="text-xl font-bold" style={{ color: "#18211C" }}>
             {devis.artisan.nom || "Votre Entreprise"}
           </h2>
-          {devis.artisan.siret && <p className="text-sm" style={{ color: "#5A635D" }}>SIRET : {devis.artisan.siret}</p>}
-          {devis.artisan.adresse && <p className="text-sm" style={{ color: "#5A635D" }}>{devis.artisan.adresse}</p>}
+          {devis.artisan.siret     && <p className="text-sm" style={{ color: "#5A635D" }}>SIRET : {devis.artisan.siret}</p>}
+          {devis.artisan.adresse   && <p className="text-sm" style={{ color: "#5A635D" }}>{devis.artisan.adresse}</p>}
           {(devis.artisan.code_postal || devis.artisan.ville) && (
             <p className="text-sm" style={{ color: "#5A635D" }}>
               {[devis.artisan.code_postal, devis.artisan.ville].filter(Boolean).join(" ")}
@@ -296,7 +439,28 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
             {docLabel}
           </div>
           <div className="text-sm" style={{ color: "#7C857F" }}>{fmtDate(documentDate)}</div>
-          {/* Bascule Modèle — vignettes compactes */}
+          {/* T1+T2 : validite_jours visible et éditable sous la date */}
+          {documentType === "devis" && (
+            <div className="flex items-center justify-end gap-1 text-xs" style={{ color: "#7C857F" }}>
+              <span>Valable</span>
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={localValiditeJours ?? ""}
+                onChange={e => {
+                  const v = parseInt(e.target.value);
+                  handleValiditeJours(isNaN(v) || v <= 0 ? null : v);
+                }}
+                placeholder="—"
+                title="Durée de validité du devis en jours"
+                className="w-12 text-right bg-transparent border-b outline-none text-xs appearance-none"
+                style={{ borderColor: "rgba(20,83,45,0.3)", color: "#5A635D" }}
+              />
+              <span>jours</span>
+            </div>
+          )}
+          {/* Bascule Modèle */}
           <div className="flex justify-end">
             <ModelPicker value={currentModele} onChange={handleModele} compact={true} />
           </div>
@@ -336,7 +500,7 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
 
       <p className="text-xs flex items-center gap-1.5" style={{ color: "#7C857F" }}>
         <Pencil className="w-3 h-3" />
-        Cliquez sur Qté, Unité, PU HT, Total HT, Lot ou les libellés pour modifier.
+        Cliquez sur n'importe quelle valeur pour la modifier · × sur la Qté = "au réel" · <Trash2 className="w-3 h-3 inline" /> = supprimer la ligne
       </p>
 
       {/* Tableau */}
@@ -366,15 +530,32 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
                   )}
                   {entries.map(({ ligne, index }) => (
                     <LigneRow key={index} ligne={ligne} withTva={withTva}
-                      onUpdate={(field, value) => updateLigne(index, field, value)} />
+                      onUpdate={(field, value) => updateLigne(index, field, value)}
+                      onDelete={() => removeLigne(index)}
+                      canDelete={lignes.length > 1} />
                   ))}
+                  {/* T3 : bouton ajouter dans ce lot */}
+                  <tr>
+                    <td colSpan={colCount} className="px-2 py-1.5">
+                      <button type="button"
+                        onClick={() => addLigne(lot || null)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors"
+                        style={{ color: "#14532D", border: "1px dashed rgba(20,83,45,0.35)" }}
+                        onMouseOver={e => (e.currentTarget.style.backgroundColor = "#E3EDE6")}
+                        onMouseOut={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+                        <Plus className="w-3 h-3" />
+                        {lot ? `Ajouter dans ${lot}` : "Ajouter une ligne (sans lot)"}
+                      </button>
+                    </td>
+                  </tr>
                   {lotGroups.length > 1 && (
                     <tr className="border-b-2 border-gray-300" style={{ backgroundColor: "#F8FAFB" }}>
                       <td colSpan={colCount - 1} className="py-2 px-3 text-right text-sm text-gray-500 italic">
                         {lot ? `Sous-total ${lot}` : "Sous-total"}
                       </td>
+                      {/* T4 : (l.quantite ?? 1) dans le sous-total */}
                       <td className="py-2 px-3 text-right text-sm font-semibold text-gray-900">
-                        {fmtMoney(round2(entries.reduce((s, { ligne }) => s + ligne.quantite * ligne.prix_unitaire_ht, 0)))}
+                        {fmtMoney(round2(entries.reduce((s, { ligne }) => s + (ligne.quantite ?? 1) * ligne.prix_unitaire_ht, 0)))}
                       </td>
                     </tr>
                   )}
@@ -383,11 +564,27 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
             ) : (
               lignes.map((ligne, i) => (
                 <LigneRow key={i} ligne={ligne} withTva={withTva}
-                  onUpdate={(field, value) => updateLigne(i, field, value)} />
+                  onUpdate={(field, value) => updateLigne(i, field, value)}
+                  onDelete={() => removeLigne(i)}
+                  canDelete={lignes.length > 1} />
               ))
             )}
           </tbody>
         </table>
+        {/* T3 : bouton ajouter (mode sans lots) */}
+        {!hasLots && (
+          <div className="mt-2 px-2">
+            <button type="button"
+              onClick={() => addLigne(null)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors"
+              style={{ color: "#14532D", border: "1px dashed rgba(20,83,45,0.35)" }}
+              onMouseOver={e => (e.currentTarget.style.backgroundColor = "#E3EDE6")}
+              onMouseOut={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+              <Plus className="w-3 h-3" />
+              Ajouter une ligne
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Totaux */}
@@ -453,7 +650,7 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
             ) : (
               <button type="button"
                 onClick={() => { setTtcDraft(currentTtcDisplay.toFixed(2)); setEditingTtc(true); }}
-                title="Cliquer pour ajuster le total"
+                title="Cliquer pour ajuster le total (redimensionne tous les PU)"
                 className="group flex items-center gap-1.5 hover:opacity-80 transition-opacity">
                 <span>{fmtMoney(currentTtcDisplay)}</span>
                 <Pencil className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100" />
@@ -483,11 +680,66 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
         </div>
       </div>
 
-      {/* Mentions légales */}
+      {/* T2 : Conditions de paiement éditables */}
+      <div className="border-t pt-3" style={{ borderColor: "rgba(20,83,45,0.1)" }}>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold shrink-0" style={{ color: "#5A635D" }}>
+            Conditions de paiement :
+          </span>
+          <input
+            type="text"
+            value={localConditionsPaiement}
+            onChange={e => setLocalConditionsPaiement(e.target.value)}
+            onBlur={() => handleConditionsPaiement(localConditionsPaiement)}
+            placeholder="Ex : 30% à la commande, solde à réception"
+            className="text-xs flex-1 bg-transparent border-b outline-none focus:border-green-600"
+            style={{ borderColor: "rgba(20,83,45,0.2)", color: "#5A635D" }}
+          />
+        </div>
+      </div>
+
+      {/* T2 : Mentions légales éditables */}
       <div className="border-t pt-4" style={{ borderColor: "rgba(20,83,45,0.1)" }}>
-        <ul className="text-xs space-y-1" style={{ color: "#7C857F" }}>
-          {devis.mentions_legales.map((m, i) => <li key={i}>• {m}</li>)}
-          {!withTva && <li className="font-medium" style={{ color: "#5A635D" }}>• TVA non applicable, art. 293 B du CGI</li>}
+        <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+          <span className="text-xs font-semibold" style={{ color: "#5A635D" }}>Mentions légales</span>
+          <div className="flex items-center gap-2">
+            {mentionsEditedByUser && (
+              <button type="button" onClick={handleRegenerMentions}
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors"
+                style={{ color: "#B45309", border: "1px solid rgba(180,83,9,0.3)", backgroundColor: "#FFFBEB" }}>
+                <RotateCcw className="w-3 h-3" />
+                Régénérer les mentions
+              </button>
+            )}
+            <button type="button" onClick={handleAddMention}
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors"
+              style={{ color: "#14532D", border: "1px dashed rgba(20,83,45,0.35)" }}
+              onMouseOver={e => (e.currentTarget.style.backgroundColor = "#E3EDE6")}
+              onMouseOut={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+              <Plus className="w-3 h-3" />
+              Ajouter
+            </button>
+          </div>
+        </div>
+        <ul className="space-y-1">
+          {localMentions.map((m, i) => (
+            <li key={i} className="flex items-start gap-1 group/mention">
+              <span className="text-xs mt-1.5 shrink-0" style={{ color: "#7C857F" }}>•</span>
+              <EditableText value={m} onChange={v => handleMentionChange(i, v)} multiline
+                className="text-xs flex-1" />
+              <button type="button" onClick={() => handleRemoveMention(i)}
+                title="Supprimer cette mention"
+                className="opacity-0 group-hover/mention:opacity-100 text-gray-300 hover:text-red-400 transition-all mt-1 shrink-0">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </li>
+          ))}
+          {!withTva && (
+            <li className="flex items-start gap-1">
+              <span className="text-xs mt-1" style={{ color: "#5A635D" }}>•</span>
+              <span className="text-xs font-medium" style={{ color: "#5A635D" }}>TVA non applicable, art. 293 B du CGI</span>
+            </li>
+          )}
         </ul>
       </div>
     </div>

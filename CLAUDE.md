@@ -36,6 +36,12 @@ Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC,
 - **Fix texte invisible PDF (définitif)** : `_set_body()` et `_set_white()` déplacés AVANT l'en-tête (ligne ~106) pour être utilisables partout. `_set_body()` maintenant appelé : fin de l'en-tête (après `numero_document`), après chaque bandeau LOT, avant chaque sous-total. Couleur corps par modèle : moderne `#18211C`, pro `#1F2937`. Tous les `set_text_color(*WHITE)` remplacés par `_set_white()` pour la lisibilité.
 - **Fix CP + Ville client (définitif)** : injection post-génération rendue INCONDITIONNELLE dans `claude_service.py` — écrase toujours ce que Claude aurait pu produire, normalise `""` → `None`. Log renommé `[INJECT CLIENT CP/VILLE]`.
 
+**Batch 6 — Améliorations éditeur devis (19 juin 2026) ✅**
+- **T1 — Fix visibilité `validite_jours`** : valeur affichée et éditable dans l'en-tête QuotePreview (input inline sous la date). Plus de désynchronisation entre aperçu et PDF.
+- **T2 — Champs éditables post-génération** : `validite_jours` (en-tête), `conditions_paiement` (bas de page, input inline), `mentions_legales` (chaque mention cliquable + ajouter/supprimer + bouton **"Régénérer les mentions"** pour revenir aux mentions Claude originales). Toutes les modifications propagées via `onUpdate → page.tsx`.
+- **T3 — Ajout/suppression de lignes** : bouton "+ Ajouter une ligne" par groupe LOT (mode LOT) ou global (mode sans lot) ; icône poubelle hover par ligne (min 1 ligne conservée).
+- **T4 — `quantite` Optional ("au réel")** : `quantite: Optional[float] = Field(None, ge=0)` dans `quote.py`. `null` = "au réel" (traité ×1 dans tous les calculs). Propagé dans `types.ts` (`number | null`), `pdf_service.py` et `word_service.py` (colonne Qté affiche "au réel"), `QuotePreview.tsx` (bouton × pour passer en null, clic sur "au réel" pour définir une quantité).
+
 **Déploiement production (14 juin 2026) ✅**
 - **Audit sécurité** : aucun `.env` suivi par git, aucune clé en dur dans le code, `ANTHROPIC_API_KEY` lue exclusivement depuis l'env via pydantic-settings.
 - **`NEXT_PUBLIC_API_URL`** : déjà câblé dans `frontend/src/lib/api.ts` avec fallback `localhost:8000` — aucune modification nécessaire.
@@ -188,6 +194,12 @@ frontend/src/
 │   │                    #   TOTAL TTC / HT éditable : ratio = new/old appliqué à chaque PU HT
 │   │                    #   Groupement LOT : headers verts (#E3EDE6/#14532D), sous-totaux
 │   │                    #   Totaux enrichis (T9) : remise / HT net / TVA / TTC / acompte / net
+│   │                    #   validite_jours : input inline sous la date (en-tête droit)
+│   │                    #   conditions_paiement : input texte bas de page
+│   │                    #   mentions_legales : éditables inline (EditableText) + add/remove
+│   │                    #                     + bouton "Régénérer" (retour mentions Claude)
+│   │                    #   Ajout/suppression lignes : bouton + par lot ou global, poubelle hover
+│   │                    #   quantite null = "au réel" : bouton × pour vider, clic pour définir
 │   │                    #   onUpdate → propage devis mis à jour à page.tsx (pour PDF/Word)
 │   │
 │   ├── PdfExportButton.tsx   # Bouton export PDF
@@ -277,6 +289,10 @@ frontend/src/
 | 51 | Python 3.11.9 fixé sur Render : `runtime.txt` + `.python-version` | `backend/` |
 | 52 | Migration modèle `claude-sonnet-4-20250514` → `claude-sonnet-4-6` (ancien modèle déprécié) | `config.py` |
 | 53 | Déploiement production : backend Render + frontend Vercel | infrastructure |
+| 54 | `validite_jours` visible et éditable dans l'en-tête QuotePreview (input inline) | `QuotePreview.tsx` |
+| 55 | `conditions_paiement` + `mentions_legales` éditables dans QuotePreview (+ bouton Régénérer) | `QuotePreview.tsx` |
+| 56 | Ajout/suppression de lignes dans QuotePreview (par lot ou global, min 1 ligne) | `QuotePreview.tsx` |
+| 57 | `quantite` Optional null = "au réel" (×1 dans calculs, "au réel" dans PDF/Word/aperçu) | `quote.py`, `types.ts`, `pdf_service.py`, `word_service.py`, `QuotePreview.tsx` |
 
 ---
 

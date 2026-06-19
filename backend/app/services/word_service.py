@@ -375,11 +375,12 @@ def generate_quote_docx(
                 _zero_para_spacing(cell.paragraphs[0])
 
         for ligne in lot_lignes:
-            montant_ht = round(ligne.quantite * ligne.prix_unitaire_ht, 2)
+            _qty = ligne.quantite if ligne.quantite is not None else 1.0
+            montant_ht = round(_qty * ligne.prix_unitaire_ht, 2)
             bg = "F8F9FA" if row_i % 2 == 1 else "FFFFFF"
             row = tbl.add_row()
 
-            qty_str = (f"{ligne.quantite:g}")
+            qty_str = "au réel" if ligne.quantite is None else f"{ligne.quantite:g}"
             vals = (
                 [ligne.poste, ligne.description,
                  qty_str,
@@ -407,7 +408,7 @@ def generate_quote_docx(
 
         # Sous-total du LOT
         if has_lots and len(lot_groups) > 1:
-            lot_ht = round(sum(l.quantite * l.prix_unitaire_ht for l in lot_lignes), 2)
+            lot_ht = round(sum((l.quantite if l.quantite is not None else 1.0) * l.prix_unitaire_ht for l in lot_lignes), 2)
             sub_row = tbl.add_row()
             n = len(sub_row.cells)
             sub_label = f"Sous-total {lot_name}" if lot_name else "Sous-total"

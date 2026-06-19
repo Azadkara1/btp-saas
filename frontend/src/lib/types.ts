@@ -10,7 +10,7 @@ export interface LigneDevis {
   lot?: string | null;
   poste: string;
   description: string;
-  quantite: number;
+  quantite: number | null;
   unite: string;
   prix_unitaire_ht: number;
   tva_taux: number;

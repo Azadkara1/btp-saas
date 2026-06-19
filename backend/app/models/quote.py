@@ -18,7 +18,7 @@ class LigneDevis(BaseModel):
     lot: Optional[str] = Field(None, description="Groupe LOT (ex: LOT 1 — Peinture)")
     poste: str = Field(..., description="Nom du poste (ex: Maçonnerie, Main d'œuvre)")
     description: str = Field(..., description="Détail de la prestation")
-    quantite: float = Field(..., gt=0)
+    quantite: Optional[float] = Field(None, ge=0)  # None = "au réel" (traité comme ×1 dans tous les calculs)
     unite: str = Field(..., description="Unité (m², ml, forfait, heure...)")
     prix_unitaire_ht: float = Field(..., ge=0)
     tva_taux: float = Field(..., description="Taux TVA en % (ex: 10.0, 20.0, 5.5)")
@@ -26,7 +26,8 @@ class LigneDevis(BaseModel):
 
     @property
     def montant_ht(self) -> float:
-        return round(self.quantite * self.prix_unitaire_ht, 2)
+        qty = self.quantite if self.quantite is not None else 1.0
+        return round(qty * self.prix_unitaire_ht, 2)
 
     @property
     def montant_tva(self) -> float:
