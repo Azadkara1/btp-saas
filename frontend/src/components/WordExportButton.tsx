@@ -9,9 +9,10 @@ interface WordExportButtonProps {
   documentType: "devis" | "facture";
   withTva: boolean;
   documentDate: string;
+  filename?: string;
 }
 
-export default function WordExportButton({ devis, documentType, withTva, documentDate }: WordExportButtonProps) {
+export default function WordExportButton({ devis, documentType, withTva, documentDate, filename }: WordExportButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +20,7 @@ export default function WordExportButton({ devis, documentType, withTva, documen
     setLoading(true);
     setError(null);
     try {
-      await exportToWord(devis, documentType, withTva, documentDate);
+      await exportToWord(devis, documentType, withTva, documentDate, filename);
     } catch {
       setError("Erreur lors de la génération Word.");
     } finally {

@@ -25,6 +25,47 @@ export async function generateQuote(request: QuoteRequest): Promise<QuoteRespons
 }
 
 /**
+ * Importe un devis/facture existant (PDF ou .docx) et retourne un Devis éditable.
+ * Les champs artisan du document importé sont ignorés — on injecte le profil enregistré.
+ */
+export async function importQuote(
+  file: File,
+  artisanFields: Partial<QuoteRequest> & { modele?: string },
+): Promise<QuoteResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  // Conversion data URL → base64 pur (même logique que doGenerate dans QuoteForm)
+  const logoRaw = artisanFields.artisan_logo_base64 ?? "";
+  const logoB64 = logoRaw.includes(",") ? logoRaw.split(",")[1] : logoRaw;
+
+  const artisanKeys = [
+    "artisan_nom", "artisan_siret", "artisan_iban", "artisan_bic",
+    "artisan_adresse", "artisan_code_postal", "artisan_ville",
+    "artisan_telephone", "artisan_email", "artisan_site_web",
+  ] as const;
+
+  for (const key of artisanKeys) {
+    const val = artisanFields[key];
+    if (val) formData.append(key, val);
+  }
+  if (logoB64) formData.append("artisan_logo_base64", logoB64);
+  if (artisanFields.modele) formData.append("modele", artisanFields.modele);
+
+  const response = await fetch(`${API_URL}/quotes/import`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Erreur réseau" }));
+    return { success: false, error: error.detail || "Erreur inconnue" };
+  }
+
+  return response.json();
+}
+
+/**
  * Exporte un devis ou une facture en Word (.docx) et déclenche le téléchargement.
  */
 export async function exportToWord(
@@ -32,6 +73,7 @@ export async function exportToWord(
   documentType: "devis" | "facture" = "devis",
   withTva: boolean = true,
   documentDate?: string,
+  filename?: string,
 ): Promise<void> {
   const response = await fetch(`${API_URL}/word/export`, {
     method: "POST",
@@ -56,7 +98,7 @@ export async function exportToWord(
   a.style.display = "none";
   document.body.appendChild(a);
   a.href = url;
-  a.download = `${documentType}.docx`;
+  a.download = filename ? `${filename}.docx` : `${documentType}.docx`;
   a.click();
   setTimeout(() => {
     document.body.removeChild(a);
@@ -72,6 +114,7 @@ export async function exportToPdf(
   documentType: "devis" | "facture" = "devis",
   withTva: boolean = true,
   documentDate?: string,
+  filename?: string,
 ): Promise<void> {
   const response = await fetch(`${API_URL}/pdf/export`, {
     method: "POST",
@@ -97,7 +140,7 @@ export async function exportToPdf(
   a.style.display = "none";
   document.body.appendChild(a);
   a.href = url;
-  a.download = `${documentType}.pdf`;
+  a.download = filename ? `${filename}.pdf` : `${documentType}.pdf`;
   a.click();
   setTimeout(() => {
     document.body.removeChild(a);

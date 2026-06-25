@@ -448,11 +448,30 @@ const SEED = {cards:[
    desc:'T4 : quantite: Optional[float] = Field(None, ge=0) dans quote.py. Traité ×1 dans tous les calculs. Aperçu : bouton × pour vider la quantité, affiche "au réel" cliquable. PDF/Word : colonne Qté affiche "au réel". Propagé sur types.ts, pdf_service.py, word_service.py, QuotePreview.tsx.'},
 
   // ══════════════════════════════════════════════
-  //  À FAIRE — Étape 1 (améliorations en cours)
+  //  FAIT — Batch 7 — Éditeur & export (25 juin 2026)
   // ══════════════════════════════════════════════
-  {id:'t08', col:'todo', etape:1, tags:['IA','Back','Front'],
+  {id:'d64', col:'done', etape:1, tags:['Front','UX'],
+   title:'numero_document éditable inline dans QuotePreview',
+   desc:'Champ input transparent dans l\'en-tête droit (entre le titre DEVIS/Facture et la date). Même pattern que validite_jours : état local localNumeroDoc, ajouté dans _buildDevis, propagé via onUpdate → page.tsx → PDF/Word. Vide = null = comportement existant (pas de numéro). Aucune modification de quote.py.'},
+  {id:'d65', col:'done', etape:1, tags:['Front','UX'],
+   title:'Nom de fichier personnalisable avant téléchargement PDF/Word',
+   desc:'Champ "Nom du fichier" partagé dans la toolbar de page.tsx. Défaut : Devis/Facture_<numero>_<client> (caractères interdits nettoyés, max 80 chars). Recalculé automatiquement si le n° ou le client change tant que l\'artisan n\'a pas personnalisé (flag filenameCustomized). Extension .pdf/.docx ajoutée par chaque bouton d\'export.'},
+  {id:'d66', col:'done', etape:1, tags:['IA','Back','Front'],
    title:'Import devis/facture existant (PDF ou .docx → QuotePreview)',
-   desc:'Nouvel endpoint POST /quotes/import. PDF : envoyé en bloc document à Claude (lecture native). .docx : texte extrait via python-docx puis envoyé à Claude. Prompt d\'extraction dans prompts.py. Résultat affiché dans QuotePreview éditable. Artisan importé ignoré au profit du profil enregistré.'},
+   desc:'Nouvel endpoint POST /quotes/import. PDF : envoyé en bloc document à Claude (lecture native, SDK 0.28.0 compatible). .docx : texte extrait via python-docx puis envoyé à Claude. Prompt IMPORT_EXTRACTION_PROMPT dans prompts.py. Résultat affiché dans QuotePreview éditable. Artisan importé ignoré au profit du profil enregistré. ImportButton.tsx : mobile-first, lit localStorage artisan_profile, loading state.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 8 — Amélioration import (25 juin 2026)
+  // ══════════════════════════════════════════════
+  {id:'d67', col:'done', etape:1, tags:['IA','Back','Bug'],
+   title:'Fix import gros PDF — max_tokens 8000 + parser dédié + logs',
+   desc:'Crash "Erreur de format" sur gros PDFs : MAX_OUTPUT_TOKENS=4096 trop bas → stop_reason="max_tokens" → JSON tronqué. Fix : MAX_OUTPUT_TOKENS=8000, _parse_import_response() dédié (détecte troncature explicitement, logue réponse brute sur échec, strip défensif fences ```json). Prompt : regroupement sous-puces en description≤80 chars, règle JSON pur. Validé facture SCM 6 pages, 206 Ko, 40 lignes, HTTP 200.'},
+  {id:'d68', col:'done', etape:1, tags:['IA','Back'],
+   title:'Extraction enrichie à l\'import — émetteur complet + import_meta',
+   desc:'IMPORT_EXTRACTION_PROMPT étendu : document_type (devis/facture, jamais converti), numero_document_original, date_document_original, emetteur complet (nom, SIRET, adresse, CP, ville, tél, email, site_web, IBAN, BIC — extraits car déjà imprimés dans le document uploadé), conditions_paiement, acompte. QuoteResponse : +import_meta Optional[dict]. types.ts : +ImportMeta, +EmetteurExtrait. numero_document_original pré-remplit devis.numero_document.'},
+  {id:'d69', col:'done', etape:1, tags:['Front','UX'],
+   title:'Flux import → ImportReview → QuotePreview (zéro re-call Claude)',
+   desc:'Nouveau composant ImportReview.tsx : résumé du document extrait (type, n°, date, client, chantier, lignes, TTC, conditions). Toggle radio "Garder mon profil" (défaut) / "Utiliser les infos extraites" visible si emetteur.nom présent. Bouton "Afficher l\'aperçu" : merge émetteur côté frontend si "replace", puis setResult — zéro appel réseau. page.tsx : +importedResponse, +importArtisanChoice, handleConfirmImport(), handleImported met à jour documentType + documentDate depuis import_meta.'},
 
   // ══════════════════════════════════════════════
   //  À FAIRE — Étape 2

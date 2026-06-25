@@ -242,6 +242,7 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
   const [chantierDesc, setChantierDesc] = useState<string>(devis.chantier.description || "");
 
   // T1+T2 : état local pour les champs éditables post-génération
+  const [localNumeroDoc, setLocalNumeroDoc]                 = useState<string>(devis.numero_document || "");
   const [localValiditeJours, setLocalValiditeJours]         = useState<number | null>(devis.validite_jours ?? null);
   const [localConditionsPaiement, setLocalConditionsPaiement] = useState<string>(devis.conditions_paiement || "");
   const [localMentions, setLocalMentions]                   = useState<string[]>([...devis.mentions_legales]);
@@ -279,6 +280,7 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
     remise_valeur:        rv || null,
     acompte:              ac || null,
     modele:               mod ?? currentModele,
+    numero_document:      localNumeroDoc || null,
     validite_jours:       localValiditeJours,
     conditions_paiement:  localConditionsPaiement || null,
     mentions_legales:     localMentions,
@@ -438,6 +440,20 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
           <div className="text-2xl font-black uppercase tracking-tight" style={{ color: "#14532D" }}>
             {docLabel}
           </div>
+          {/* Numéro de document éditable — vide = pas de numéro dans PDF/Word */}
+          <input
+            type="text"
+            value={localNumeroDoc}
+            onChange={e => {
+              const val = e.target.value;
+              setLocalNumeroDoc(val);
+              onUpdate({ ..._buildDevis(lignes, remiseType, remiseValeur, acompte), numero_document: val || null });
+            }}
+            placeholder="N° —"
+            title="Numéro de document"
+            className="text-sm font-semibold text-right bg-transparent border-b outline-none w-36"
+            style={{ borderColor: "rgba(20,83,45,0.3)", color: "#14532D" }}
+          />
           <div className="text-sm" style={{ color: "#7C857F" }}>{fmtDate(documentDate)}</div>
           {/* T1+T2 : validite_jours visible et éditable sous la date */}
           {documentType === "devis" && (

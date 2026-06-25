@@ -69,6 +69,29 @@ export interface Devis {
   conditions_paiement?: string | null;
 }
 
+// ── Import meta ─────────────────────────────────────────────────
+export interface EmetteurExtrait {
+  nom?: string | null;
+  siret?: string | null;
+  adresse?: string | null;
+  code_postal?: string | null;
+  ville?: string | null;
+  telephone?: string | null;
+  email?: string | null;
+  site_web?: string | null;
+  iban?: string | null;
+  bic?: string | null;
+}
+
+export interface ImportMeta {
+  document_type?: "devis" | "facture" | null;
+  numero_document_original?: string | null;
+  date_document_original?: string | null;
+  emetteur?: EmetteurExtrait | null;
+  conditions_paiement?: string | null;
+  acompte?: number | null;
+}
+
 // ── Requête / Réponse API ────────────────────────────────────────
 export interface PrixArtisan {
   prestation: string;
@@ -107,4 +130,5 @@ export interface QuoteResponse {
   devis?: Devis;
   error?: string;
   tokens_used?: number;
+  import_meta?: ImportMeta;
 }

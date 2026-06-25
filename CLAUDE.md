@@ -1,6 +1,6 @@
 # CLAUDE.md — Contexte projet BTP SaaS
 
-## 📍 État du projet — 14 juin 2026
+## 📍 État du projet — 25 juin 2026
 
 ### Étape 1 — MVP ✅ TERMINÉE — 🚀 EN PRODUCTION
 
@@ -41,6 +41,15 @@ Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC,
 - **T2 — Champs éditables post-génération** : `validite_jours` (en-tête), `conditions_paiement` (bas de page, input inline), `mentions_legales` (chaque mention cliquable + ajouter/supprimer + bouton **"Régénérer les mentions"** pour revenir aux mentions Claude originales). Toutes les modifications propagées via `onUpdate → page.tsx`.
 - **T3 — Ajout/suppression de lignes** : bouton "+ Ajouter une ligne" par groupe LOT (mode LOT) ou global (mode sans lot) ; icône poubelle hover par ligne (min 1 ligne conservée).
 - **T4 — `quantite` Optional ("au réel")** : `quantite: Optional[float] = Field(None, ge=0)` dans `quote.py`. `null` = "au réel" (traité ×1 dans tous les calculs). Propagé dans `types.ts` (`number | null`), `pdf_service.py` et `word_service.py` (colonne Qté affiche "au réel"), `QuotePreview.tsx` (bouton × pour passer en null, clic sur "au réel" pour définir une quantité).
+
+**Batch 7 — Éditeur & export (25 juin 2026) ✅**
+- **`numero_document` éditable inline dans QuotePreview** : champ input transparent dans l'en-tête droit (entre le titre "DEVIS/Facture" et la date), même pattern que `validite_jours` au Batch 6 — état local `localNumeroDoc`, ajouté dans `_buildDevis`, propagé via `onUpdate → page.tsx → PDF/Word`. Vide → `null` → comportement existant (pas de numéro dans le document). Aucune modification de `quote.py`.
+- **Nom de fichier personnalisable avant téléchargement** : champ "Nom du fichier" partagé dans la toolbar de `page.tsx` (près des boutons PDF/Word). Pré-rempli automatiquement au format `Devis_<numero>_<client>` ou `Facture_...`, caractères interdits nettoyés, max 80 chars. Recalculé automatiquement si le n° de document ou le client change (via `useEffect` + flag `filenameCustomized`). L'extension `.pdf` / `.docx` est ajoutée par chaque bouton. Dès que l'artisan modifie manuellement le nom, le flag bloque le recalcul automatique.
+
+**Batch 8 — Amélioration de l'import (25 juin 2026) ✅**
+- **C — Fix import gros PDF** : `MAX_OUTPUT_TOKENS` porté à 8 000 (était 4 096 → stop_reason="max_tokens" sur ~50 lignes → JSON tronqué → crash). `_parse_import_response()` dédié à l'import : détecte explicitement la troncature, logue la réponse brute sur échec, strip défensif des fences ```json. Prompt renforcé : regroupement obligatoire des sous-puces dans `description` (max 80 chars), règle JSON pur "commence IMMÉDIATEMENT par `{`". Validé sur facture SCM 6 pages (206 Ko, 40 lignes, HTTP 200).
+- **B — Extraction enrichie** : `IMPORT_EXTRACTION_PROMPT` étendu — `document_type` (ne jamais convertir une facture en devis), `numero_document_original`, `date_document_original`, `emetteur` complet (nom, SIRET, adresse, CP, ville, tél, email, site_web, **IBAN, BIC** — extraits car déjà imprimés dans le document uploadé, règle distincte de la génération), `conditions_paiement`, `acompte`. `QuoteResponse` : +`import_meta: Optional[dict]`. `types.ts` : +`ImportMeta`, +`EmetteurExtrait`. `numero_document_original` pré-remplit `devis.numero_document`. `conditions_paiement` + `acompte` vont directement dans `Devis`.
+- **A — Flux import → ImportReview → QuotePreview** : après import, l'utilisateur voit `ImportReview.tsx` (nouveau composant) avant l'aperçu. Affiche : type, n°, date, client, chantier, nb lignes, total TTC, conditions de paiement. Toggle radio "Garder mon profil enregistré" (défaut) vs "Utiliser les infos extraites" (visible si `emetteur.nom` extrait). "Afficher l'aperçu" : merge côté frontend si "replace" — **zéro appel Claude**. `page.tsx` : +`importedResponse`, +`importArtisanChoice`, `handleConfirmImport()`, `handleImported` met à jour `documentType` et `documentDate` depuis `import_meta`.
 
 **Déploiement production (14 juin 2026) ✅**
 - **Audit sécurité** : aucun `.env` suivi par git, aucune clé en dur dans le code, `ANTHROPIC_API_KEY` lue exclusivement depuis l'env via pydantic-settings.
@@ -131,8 +140,10 @@ backend/app/
 │                        #                   remise_type, remise_valeur, acompte,
 │                        #                   modele?="moderne",
 │                        #                   prix_personnalises?
+│                        #   QuoteResponse : success, devis?, error?, tokens_used?,
+│                        #                   import_meta? (UNIQUEMENT renseigné par l'import)
 ├── routers/
-│   ├── quotes.py        # POST /quotes/generate
+│   ├── quotes.py        # POST /quotes/generate  +  POST /quotes/import
 │   ├── pdf.py           # POST /pdf/export
 │   └── word.py          # POST /word/export
 └── services/
@@ -140,6 +151,13 @@ backend/app/
     │                      #   ⚠️ Injection POST-GÉNÉRATION (jamais envoyé à Claude) :
     │                      #     adresse, cp, ville, tel, email, site_web, logo, iban, bic,
     │                      #     numero_document, remise_type, remise_valeur, acompte, modele
+    ├── import_service.py  # Import PDF/.docx → extraction Claude → QuoteResponse + import_meta
+    │                      #   PDF : bloc document natif base64 (Claude lit directement)
+    │                      #   .docx : python-docx → texte plat → Claude texte
+    │                      #   MAX_OUTPUT_TOKENS = 8000 (garde-fou troncature)
+    │                      #   _parse_import_response : détecte stop_reason="max_tokens",
+    │                      #                            logue réponse brute sur échec
+    │                      #   _inject_artisan : écrase artisan extrait par profil localStorage
     ├── price_search.py    # Base de prix BTP 2026 + coefficients régionaux (12 régions)
     ├── pdf_service.py     # Génération PDF — fpdf2, A4
     │                      #   Modèle « moderne » : bandeau vert #14532D, Helvetica, lots #E3EDE6
@@ -202,14 +220,24 @@ frontend/src/
 │   │                    #   quantite null = "au réel" : bouton × pour vider, clic pour définir
 │   │                    #   onUpdate → propage devis mis à jour à page.tsx (pour PDF/Word)
 │   │
+│   ├── ImportButton.tsx      # Bouton d'import — lit localStorage artisan_profile, FormData
+│   ├── ImportReview.tsx      # Écran de validation post-import
+│   │                         #   Affiche : type doc, n°, date, client, chantier, lignes, TTC, conditions
+│   │                         #   Toggle radio "Garder mon profil" (défaut) / "Utiliser l'émetteur extrait"
+│   │                         #   (visible seulement si import_meta.emetteur.nom non null)
+│   │                         #   Bouton "Afficher l'aperçu" → handleConfirmImport (zéro appel Claude)
 │   ├── PdfExportButton.tsx   # Bouton export PDF
 │   └── WordExportButton.tsx  # Bouton export Word (.docx)
 │
 └── lib/
-    ├── api.ts           # generateQuote, exportToPdf, exportToWord
+    ├── api.ts           # generateQuote, importQuote, exportToPdf, exportToWord
     └── types.ts         # Miroir EXACT des modèles Pydantic — toujours synchroniser
                          #   Devis        : + modele?: string | null
                          #   QuoteRequest : + modele?: string
+                         #   QuoteResponse: + import_meta?: ImportMeta
+                         #   ImportMeta   : document_type, numero_document_original,
+                         #                  date_document_original, emetteur, conditions_paiement, acompte
+                         #   EmetteurExtrait : nom, siret, adresse, cp, ville, tel, email, site_web, iban, bic
 ```
 
 ---
@@ -293,6 +321,11 @@ frontend/src/
 | 55 | `conditions_paiement` + `mentions_legales` éditables dans QuotePreview (+ bouton Régénérer) | `QuotePreview.tsx` |
 | 56 | Ajout/suppression de lignes dans QuotePreview (par lot ou global, min 1 ligne) | `QuotePreview.tsx` |
 | 57 | `quantite` Optional null = "au réel" (×1 dans calculs, "au réel" dans PDF/Word/aperçu) | `quote.py`, `types.ts`, `pdf_service.py`, `word_service.py`, `QuotePreview.tsx` |
+| 58 | `numero_document` éditable inline dans l'en-tête QuotePreview (même pattern que `validite_jours`, propagé via onUpdate) | `QuotePreview.tsx` |
+| 59 | Nom de fichier personnalisable avant téléchargement PDF/Word (défaut `Devis/Facture_<n°>_<client>`, recalcul auto, extension ajoutée par chaque bouton) | `page.tsx`, `PdfExportButton.tsx`, `WordExportButton.tsx`, `api.ts` |
+| 60 | Fix import gros PDF : `MAX_OUTPUT_TOKENS=8000`, `_parse_import_response` dédié (détection troncature, log brut), prompt renforcé (regroupement sous-puces, JSON pur). Validé facture SCM 6 pages | `import_service.py`, `prompts.py` |
+| 61 | Extraction enrichie à l'import : `document_type`, `numero_document_original`, `date_document_original`, `emetteur` complet (IBAN/BIC inclus), `conditions_paiement`, `acompte`. `import_meta` dans `QuoteResponse`. `numero_document_original` pré-remplit `devis.numero_document` | `import_service.py`, `prompts.py`, `quote.py`, `types.ts` |
+| 62 | Flux import → `ImportReview` → `QuotePreview` (zéro re-call Claude). Composant `ImportReview.tsx` : résumé extrait + toggle artisan "garder profil" (défaut) / "utiliser émetteur extrait". Merge émetteur côté frontend si "replace". `handleImported` met à jour `documentType` + `documentDate` depuis `import_meta` | `ImportReview.tsx`, `page.tsx` |
 
 ---
 
@@ -315,7 +348,9 @@ frontend/src/
 | **Logo Word** | `_logo_dimensions_cm()` avec PIL, borné à 4×2.5 cm. `add_picture(width=Cm(w), height=Cm(h))` pour forcer les deux dimensions sans déformation. |
 | **Logo frontend** | Data URL complet (`data:image/…;base64,…`) dans le state React. Conversion base64 pur dans `doGenerate()`. |
 | **modele** | Injecté post-génération dans `claude_service.py` exactement comme `remise_type`, jamais envoyé à Claude. `pdf_service` et `word_service` lisent `devis.modele` pour choisir la palette/police. |
-| **Infos artisan → Claude** | Adresse artisan, logo, IBAN, BIC, artisan_code_postal/ville, numero_document, remise, acompte, modele ne passent **jamais** dans le prompt Claude. Injection dans `claude_service.py` après génération. Client nom/adresse sont envoyés à Claude (message user) pour le JSON client. Client code_postal/ville sont injectés POST-génération de façon INCONDITIONNELLE (écrasent ce que Claude aurait pu produire), normalisant `""` → None. |
+| **Infos artisan → Claude (génération)** | Adresse artisan, logo, IBAN, BIC, artisan_code_postal/ville, numero_document, remise, acompte, modele ne passent **jamais** dans le prompt Claude de génération. Injection dans `claude_service.py` après génération. Client nom/adresse sont envoyés à Claude (message user) pour le JSON client. Client code_postal/ville sont injectés POST-génération de façon INCONDITIONNELLE. |
+| **IBAN/BIC à l'import** | La règle "infos sensibles jamais par Claude" s'applique à la **génération** uniquement. Pour l'**import**, l'IBAN et le BIC figurent déjà dans le document uploadé par l'utilisateur et sont renvoyés à son propre frontend → extraction normale dans `import_meta.emetteur`. `_inject_artisan` (qui ne les envoie pas à Claude) continue de s'appliquer sur `devis.artisan` côté génération — les deux règles coexistent sans conflit. |
+| **import_meta** | Champ `Optional[dict]` dans `QuoteResponse`. **Uniquement renseigné par `import_service.py`**, jamais par `claude_service.py` (génération laisse la valeur à `None`). Contient : `document_type`, `numero_document_original`, `date_document_original`, `emetteur` (émetteur extrait complet), `conditions_paiement`, `acompte`. Le frontend lit ces valeurs dans `handleImported` pour pré-remplir `documentType`, `documentDate` et proposer le toggle artisan dans `ImportReview`. |
 | **localStorage + SSR** | `useState` lazy initializer ne doit **pas** accéder à `localStorage` → erreur d'hydratation Next.js. Utiliser `useEffect(() => { … }, [])`. |
 | **PDF Chrome** | Fix : `application/octet-stream` dans `api.ts`. |
 | **Pagination PDF** | `auto_page_break=False` pendant le tableau. Stratégie : calculer `lot_total_h` (bandeau + lignes + sous-total) AVANT de dessiner. Si ça tient sur la page courante → dessin direct. Si ça tient sur une page fraîche → `add_page()` + header. Si lot > page entière (`big_lot`) → sauts par ligne avec `sub_margin` pour coller la dernière ligne au sous-total. Footer (mentions + RIB + signature) : estimation de hauteur globale, `add_page()` si insuffisant. |

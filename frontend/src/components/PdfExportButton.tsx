@@ -13,9 +13,10 @@ interface PdfExportButtonProps {
   documentType: "devis" | "facture";
   withTva: boolean;
   documentDate: string;
+  filename?: string;
 }
 
-export default function PdfExportButton({ devis, documentType, withTva, documentDate }: PdfExportButtonProps) {
+export default function PdfExportButton({ devis, documentType, withTva, documentDate, filename }: PdfExportButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +24,7 @@ export default function PdfExportButton({ devis, documentType, withTva, document
     setLoading(true);
     setError(null);
     try {
-      await exportToPdf(devis, documentType, withTva, documentDate);
+      await exportToPdf(devis, documentType, withTva, documentDate, filename);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur génération PDF.");
     } finally {

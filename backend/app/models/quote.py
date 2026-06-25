@@ -148,3 +148,4 @@ class QuoteResponse(BaseModel):
     devis: Optional[Devis] = None
     error: Optional[str] = None
     tokens_used: Optional[int] = None
+    import_meta: Optional[dict] = None  # Uniquement renseigné par l'import (jamais par la génération)
