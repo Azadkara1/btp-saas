@@ -115,8 +115,8 @@
   <header class="top">
     <div class="brand">
       <h1>Tableau de bord — DevisBTP</h1>
-      <span class="src">source · CLAUDE.md · 14 juin 2026</span>
-      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. <strong>🚀 Étape 1 MVP terminée et en production (Render + Vercel).</strong> Étape 2 : BDD + Auth + Stripe.</p>
+      <span class="src">source · CLAUDE.md · 2 juillet 2026</span>
+      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. <strong>🚀 Étape 1 MVP terminée et en production (Render + Vercel).</strong> Étape 2 en cours : Auth Supabase <strong>Lot 1 ✅</strong> — Persistance profil <strong>Lot 2 ✅</strong> — Documents/historique &amp; Numérotation <strong>Lots 3 &amp; 4 ✅</strong> — Stripe (Lot 5) à venir.</p>
     </div>
     <div class="progress-card">
       <div class="lbl">Avancement global</div>
@@ -474,25 +474,51 @@ const SEED = {cards:[
    desc:'Nouveau composant ImportReview.tsx : résumé du document extrait (type, n°, date, client, chantier, lignes, TTC, conditions). Toggle radio "Garder mon profil" (défaut) / "Utiliser les infos extraites" visible si emetteur.nom présent. Bouton "Afficher l\'aperçu" : merge émetteur côté frontend si "replace", puis setResult — zéro appel réseau. page.tsx : +importedResponse, +importArtisanChoice, handleConfirmImport(), handleImported met à jour documentType + documentDate depuis import_meta.'},
 
   // ══════════════════════════════════════════════
+  //  FAIT — Étape 2 Lot 1 — Auth Supabase (2 juillet 2026)
+  // ══════════════════════════════════════════════
+  {id:'d70', col:'done', etape:2, tags:['Back'],
+   title:'Auth backend : get_current_user via JWKS Supabase',
+   desc:'auth.py : dépendance FastAPI vérifiant les JWT Supabase par JWKS asymétrique RS256/ES256. Singleton PyJWKClient (cache 5 min, rotation auto). Retourne CurrentUser(user_id, email). config.py : +supabase_url + supabase_jwks_url dérivée. requirements.txt : +PyJWT[crypto]>=2.8.0.'},
+  {id:'d71', col:'done', etape:2, tags:['Back'],
+   title:'Routes backend protégées par Depends(get_current_user)',
+   desc:'/quotes/generate, /quotes/import, /pdf/export, /word/export protégées (HTTP 401 sans token valide). /health reste public. CORS : Authorization ajouté dans allow_headers.'},
+  {id:'d72', col:'done', etape:2, tags:['Front'],
+   title:'Plomberie Supabase SSR — client, server, middleware',
+   desc:'supabase-client.ts (createBrowserClient). supabase-server.ts (createServerClient + cookies SSR, try/catch Server Components). middleware.ts : refresh session + protection de toutes les routes sauf /login et /auth/*, recréation supabaseResponse dans setAll (gotcha SSR évité).'},
+  {id:'d73', col:'done', etape:2, tags:['Front','UX'],
+   title:'Login / Inscription / Confirmation e-mail',
+   desc:'login/page.tsx : 3 états (login / signup / check-email). signInWithPassword → redirect /. signUp → écran "Vérifiez votre e-mail". auth/confirm/route.ts : callback verifyOtp → session cookie → redirect /. Palette verte cohérente avec le reste de l\'app.'},
+  {id:'d74', col:'done', etape:2, tags:['Front'],
+   title:'Header Authorization Bearer + email + déconnexion',
+   desc:'api.ts : authHeader() via getSession() (lecture locale, zéro round-trip) injecté sur les 4 appels backend (generate, import, pdf, word). page.tsx : email affiché dans le header + bouton Déconnexion (signOut → redirect /login).'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Étape 2 Lot 2 — Persistance profil (2 juillet 2026)
+  // ══════════════════════════════════════════════
+  {id:'t03', col:'done', etape:2, tags:['BDD','Back','Front'],
+   title:'Lot 2 ✅ — Persistance profil artisan (table entreprises)',
+   desc:'Backend : ProfileEntreprise Pydantic, GET/PUT /profile (client service_role, filtrage user_id manuel). supabase_client.py singleton. pydantic-settings mis à jour (2.14.2). Frontend : getProfile()/saveProfile() dans api.ts, ProfileEntreprise dans types.ts. QuoteForm : chargement profil au montage (backend → localStorage fallback), bouton "Enregistrer le profil", modele_prefere pré-positionne le sélecteur. Bannière migration localStorage. onModeleLoaded callback vers page.tsx.'},
+
+  // ══════════════════════════════════════════════
   //  À FAIRE — Étape 2
   // ══════════════════════════════════════════════
-  {id:'t03', col:'todo', etape:2, tags:['BDD'],
-   title:'PostgreSQL — historique devis et clients',
-   desc:'Schéma : tables devis, lignes, clients, artisans. Migrations Alembic.'},
-  {id:'t04', col:'todo', etape:2, tags:['Back'],
-   title:'Authentification utilisateurs',
-   desc:'JWT ou session. Chaque artisan accède uniquement à ses devis.'},
-  {id:'t05', col:'todo', etape:2, tags:['Back'],
-   title:'Abonnements Stripe',
+  {id:'t04', col:'done', etape:2, tags:['BDD','Back','Front'],
+   title:'Lot 3 ✅ — Historique documents (tables clients + documents)',
+   desc:'Backend : DocumentCreate/Summary/Detail Pydantic, POST /documents (auto-save brouillon + upsert client), GET /documents (historique batch-fetch), GET /documents/{id} (payload complet), PATCH /documents/{id} (transition statut). Frontend : saveDocument(), listDocuments(), getDocument(), updateDocumentStatus() dans api.ts. HistoriqueView.tsx (badges statut, réouverture). Auto-save post-génération/import avec feedback discret. Badge statut + bouton "Marquer envoyé" dans la toolbar.'},
+  {id:'t05', col:'done', etape:2, tags:['BDD','Back'],
+   title:'Lot 4 ✅ — Numérotation automatique annuelle',
+   desc:'Fonction Postgres get_next_numero(user_id, type) : UPDATE atomique avec CASE (reset annuel dans le même UPDATE, verrou ligne, zéro race condition). Retourne DEV-YYYY-NNN / FAC-YYYY-NNN. Compteurs séparés devis/facture. numero_service.py appelle la RPC via client service_role. Numéro attribué uniquement à la transition brouillon→envoyé (légalité séquence continue).'},
+  {id:'t06b', col:'todo', etape:2, tags:['Back'],
+   title:'Lot 5 — Abonnements Stripe',
    desc:'Plans Freemium / Pro. Gestion des quotas (nb de devis/mois).'},
 
   // ══════════════════════════════════════════════
   //  À FAIRE — Étape 3
   // ══════════════════════════════════════════════
-  {id:'t06', col:'todo', etape:3, tags:['IA'],
+  {id:'t07b', col:'todo', etape:3, tags:['IA'],
    title:'Saisie vocale (speech-to-text)',
    desc:'Dicter la description du chantier sur mobile, mains occupées. API Web Speech ou Whisper.'},
-  {id:'t07', col:'todo', etape:3, tags:['IA'],
+  {id:'t08', col:'todo', etape:3, tags:['IA'],
    title:'Vision IA (analyse images / plans)',
    desc:'Photo d\'un plan ou d\'un chantier → chiffrage automatique. Modèle Claude vision.'},
 ]};

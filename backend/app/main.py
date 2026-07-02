@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.routers import quotes, pdf, word
+from app.routers.profile import router as profile_router
+from app.routers.documents import router as documents_router
 
 settings = get_settings()
 
@@ -29,14 +31,16 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Accept", "Authorization"],
 )
 
 # ── Routers ─────────────────────────────────────────────────────
 app.include_router(quotes.router)
 app.include_router(pdf.router)
 app.include_router(word.router)
+app.include_router(profile_router, prefix="/profile", tags=["profile"])
+app.include_router(documents_router, prefix="/documents", tags=["documents"])
 
 
 @app.get("/")

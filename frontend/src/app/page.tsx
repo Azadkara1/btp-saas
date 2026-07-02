@@ -1,14 +1,18 @@
 "use client";
 import { useState, useEffect } from "react";
-import { HardHat, RefreshCw, FileText, Receipt, Percent, Calendar } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { HardHat, RefreshCw, FileText, Receipt, Percent, Calendar, LogOut, History, Send, CheckCircle } from "lucide-react";
 import QuoteForm from "@/components/QuoteForm";
 import QuotePreview from "@/components/QuotePreview";
 import PdfExportButton from "@/components/PdfExportButton";
 import WordExportButton from "@/components/WordExportButton";
 import ModelPicker from "@/components/ModelPicker";
-import { QuoteResponse, Devis } from "@/lib/types";
+import { QuoteResponse, Devis, DocumentCreate } from "@/lib/types";
 import ImportButton from "@/components/ImportButton";
 import ImportReview from "@/components/ImportReview";
+import HistoriqueView from "@/components/HistoriqueView";
+import { createClient } from "@/lib/supabase-client";
+import { saveDocument, updateDocumentStatus } from "@/lib/api";
 
 type DocumentType = "devis" | "facture";
 
@@ -50,6 +54,21 @@ function DocTypeToggle({
 }
 
 export default function HomePage() {
+  const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data }) => {
+      setUserEmail(data.user?.email ?? null);
+    });
+  }, []);
+
+  const handleLogout = async () => {
+    await createClient().auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
+
   const [result, setResult]             = useState<Devis | null>(null);
   const [tokensUsed, setTokensUsed]     = useState<number | null>(null);
   const [documentType, setDocumentType] = useState<DocumentType>("devis");
@@ -62,6 +81,10 @@ export default function HomePage() {
   const [filenameCustomized, setFilenameCustomized] = useState(false);
   const [importedResponse, setImportedResponse]     = useState<QuoteResponse | null>(null);
   const [importArtisanChoice, setImportArtisanChoice] = useState<"keep" | "replace">("keep");
+  const [activeView, setActiveView]                 = useState<"form" | "historique">("form");
+  const [savedDocumentId, setSavedDocumentId]       = useState<string | null>(null);
+  const [savedDocumentStatut, setSavedDocumentStatut] = useState<string>("brouillon");
+  const [saveFeedback, setSaveFeedback]             = useState<"saving" | "saved" | "error" | null>(null);
 
   // Recalcule le nom de fichier si non personnalisé (numero_document ou client peut avoir changé)
   useEffect(() => {
@@ -70,11 +93,38 @@ export default function HomePage() {
     }
   }, [result, documentType, filenameCustomized]);
 
+  const doAutoSave = async (devis: Devis, docType: DocumentType, date: string) => {
+    setSaveFeedback("saving");
+    try {
+      const payload: DocumentCreate = {
+        type_doc: docType,
+        date_document: date,
+        devis_payload: devis,
+        total_ttc: devis.totaux.total_ttc,
+        client_nom: devis.client.nom ?? null,
+        client_adresse: devis.client.adresse ?? null,
+        client_code_postal: devis.client.code_postal ?? null,
+        client_ville: devis.client.ville ?? null,
+      };
+      const created = await saveDocument(payload);
+      setSavedDocumentId(created.id);
+      setSavedDocumentStatut("brouillon");
+      setSaveFeedback("saved");
+      setTimeout(() => setSaveFeedback(null), 3000);
+    } catch {
+      setSaveFeedback("error");
+      setTimeout(() => setSaveFeedback(null), 3000);
+    }
+  };
+
   const handleQuoteGenerated = (response: QuoteResponse) => {
     if (response.devis) {
       setFilenameCustomized(false);
+      setSavedDocumentId(null);
+      setSavedDocumentStatut("brouillon");
       setResult(response.devis);
       setTokensUsed(response.tokens_used || null);
+      doAutoSave(response.devis, documentType, documentDate);
       setTimeout(() => {
         document.getElementById("quote-result")?.scrollIntoView({ behavior: "smooth" });
       }, 100);
@@ -124,6 +174,9 @@ export default function HomePage() {
     setResult(finalDevis);
     setImportedResponse(null);
     setTokensUsed(null);
+    setSavedDocumentId(null);
+    setSavedDocumentStatut("brouillon");
+    doAutoSave(finalDevis, documentType, documentDate);
     setTimeout(() => {
       document.getElementById("quote-result")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
@@ -138,7 +191,33 @@ export default function HomePage() {
     setDocumentDate(new Date().toISOString().split("T")[0]);
     setFilename("");
     setFilenameCustomized(false);
+    setSavedDocumentId(null);
+    setSavedDocumentStatut("brouillon");
+    setSaveFeedback(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleMarkEnvoye = async () => {
+    if (!savedDocumentId) return;
+    try {
+      const r = await updateDocumentStatus(savedDocumentId, "envoyé");
+      setSavedDocumentStatut("envoyé");
+      if (r.numero && result) {
+        setResult({ ...result, numero_document: r.numero });
+      }
+    } catch { /* feedback silencieux — l'artisan peut réessayer */ }
+  };
+
+  const handleOpenFromHistory = (devis: Devis, docId: string, statut: string, typeDoc: string) => {
+    setSavedDocumentId(docId);
+    setSavedDocumentStatut(statut);
+    setDocumentType(typeDoc === "facture" ? "facture" : "devis");
+    setResult(devis);
+    setFilenameCustomized(false);
+    setActiveView("form");
+    setTimeout(() => {
+      document.getElementById("quote-result")?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
   };
 
   return (
@@ -153,16 +232,56 @@ export default function HomePage() {
             <h1 className="text-lg font-black leading-none" style={{ color: "#18211C" }}>DevisBTP</h1>
             <p className="text-xs" style={{ color: "#7C857F" }}>Devis professionnel en quelques secondes</p>
           </div>
+          <div className="ml-auto flex items-center gap-3">
+            {userEmail && (
+              <span className="text-xs hidden sm:block" style={{ color: "#7C857F" }}>
+                {userEmail}
+              </span>
+            )}
+            <button
+              onClick={() => setActiveView(v => v === "historique" ? "form" : "historique")}
+              className="flex items-center gap-1.5 text-xs rounded-xl px-3 py-2 transition-colors"
+              style={activeView === "historique"
+                ? { backgroundColor: "#14532D", color: "#FFFFFF" }
+                : { border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D", backgroundColor: "white" }}>
+              <History className="w-3.5 h-3.5" /> Historique
+            </button>
+            <button onClick={handleLogout}
+              className="flex items-center gap-1.5 text-xs rounded-xl px-3 py-2 bg-white transition-colors"
+              style={{ border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D" }}
+              title="Se déconnecter">
+              <LogOut className="w-3.5 h-3.5" /> Déconnexion
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
 
-        {result ? (
+        {activeView === "historique" ? (
+          <HistoriqueView onOpen={handleOpenFromHistory} />
+        ) : result ? (
           <div id="quote-result" className="space-y-4">
             <div className="flex items-start justify-between flex-wrap gap-3">
               <div>
-                <h2 className="text-xl font-bold" style={{ color: "#18211C" }}>Document généré</h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-xl font-bold" style={{ color: "#18211C" }}>Document généré</h2>
+                  {saveFeedback === "saving" && (
+                    <span className="text-xs px-2 py-0.5 rounded-full animate-pulse" style={{ backgroundColor: "#E3EDE6", color: "#14532D" }}>
+                      Enregistrement…
+                    </span>
+                  )}
+                  {saveFeedback === "saved" && (
+                    <span className="text-xs px-2 py-0.5 rounded-full flex items-center gap-1" style={{ backgroundColor: "#D1FAE5", color: "#14532D" }}>
+                      <CheckCircle className="w-3 h-3" /> Brouillon enregistré
+                    </span>
+                  )}
+                  {saveFeedback === "error" && (
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "#FEF2F2", color: "#B91C1C" }}>
+                      Échec sauvegarde
+                    </span>
+                  )}
+                </div>
                 {tokensUsed && (
                   <p className="text-xs" style={{ color: "#7C857F" }}>{tokensUsed.toLocaleString()} tokens utilisés</p>
                 )}
@@ -212,6 +331,30 @@ export default function HomePage() {
                   />
                   <span className="text-xs shrink-0" style={{ color: "#7C857F" }}>.pdf / .docx</span>
                 </label>
+                {/* Badge statut */}
+                {savedDocumentId && (() => {
+                  const sc: Record<string, { label: string; color: string; bg: string }> = {
+                    brouillon: { label: "Brouillon", color: "#6B7280", bg: "#F3F4F6" },
+                    "envoyé":  { label: "Envoyé",    color: "#1D4ED8", bg: "#DBEAFE" },
+                    "signé":   { label: "Signé",     color: "#7C3AED", bg: "#EDE9FE" },
+                    "payé":    { label: "Payé",      color: "#14532D", bg: "#D1FAE5" },
+                  };
+                  const s = sc[savedDocumentStatut] ?? { label: savedDocumentStatut, color: "#6B7280", bg: "#F3F4F6" };
+                  return (
+                    <span className="text-xs px-2.5 py-1.5 rounded-full font-medium"
+                      style={{ color: s.color, backgroundColor: s.bg }}>
+                      {s.label}
+                    </span>
+                  );
+                })()}
+                {/* Marquer envoyé */}
+                {savedDocumentId && savedDocumentStatut === "brouillon" && (
+                  <button onClick={handleMarkEnvoye}
+                    className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors"
+                    style={{ backgroundColor: "#1D4ED8", color: "white" }}>
+                    <Send className="w-3.5 h-3.5" /> Marquer envoyé
+                  </button>
+                )}
                 <PdfExportButton devis={result} documentType={documentType} withTva={withTva} documentDate={documentDate} filename={filename || undefined} />
                 <WordExportButton devis={result} documentType={documentType} withTva={withTva} documentDate={documentDate} filename={filename || undefined} />
 
@@ -266,7 +409,7 @@ export default function HomePage() {
                 <div className="flex-1 h-px" style={{ backgroundColor: "rgba(20,83,45,0.12)" }} />
               </div>
             </div>
-            <QuoteForm onQuoteGenerated={handleQuoteGenerated} modele={modele} docType={documentType} />
+            <QuoteForm onQuoteGenerated={handleQuoteGenerated} modele={modele} docType={documentType} onModeleLoaded={setModele} />
           </>
         )}
       </div>

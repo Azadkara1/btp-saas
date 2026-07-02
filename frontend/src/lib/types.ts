@@ -69,6 +69,22 @@ export interface Devis {
   conditions_paiement?: string | null;
 }
 
+// ── Profil entreprise (Lot 2) ────────────────────────────────────
+export interface ProfileEntreprise {
+  nom?: string | null;
+  siret?: string | null;
+  adresse?: string | null;
+  code_postal?: string | null;
+  ville?: string | null;
+  telephone?: string | null;
+  email?: string | null;
+  site_web?: string | null;
+  logo_base64?: string | null;
+  iban?: string | null;
+  bic?: string | null;
+  modele_prefere: string;
+}
+
 // ── Import meta ─────────────────────────────────────────────────
 export interface EmetteurExtrait {
   nom?: string | null;
@@ -131,4 +147,36 @@ export interface QuoteResponse {
   error?: string;
   tokens_used?: number;
   import_meta?: ImportMeta;
+}
+
+// ── Documents (Lots 3 & 4) ───────────────────────────────────────
+export interface DocumentCreate {
+  type_doc: string;
+  date_document?: string | null;
+  devis_payload: Devis;
+  total_ttc?: number | null;
+  client_nom?: string | null;
+  client_adresse?: string | null;
+  client_code_postal?: string | null;
+  client_ville?: string | null;
+}
+
+export interface DocumentSummary {
+  id: string;
+  type_doc: string;
+  numero?: string | null;
+  client_nom?: string | null;
+  total_ttc?: number | null;
+  statut: string;
+  date_document?: string | null;
+  created_at: string;
+}
+
+export interface DocumentDetail extends DocumentSummary {
+  devis_payload: Devis;
+}
+
+export interface StatusPatchResponse {
+  statut: string;
+  numero?: string | null;
 }

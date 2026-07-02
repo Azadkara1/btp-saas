@@ -1,6 +1,6 @@
 # CLAUDE.md — Contexte projet BTP SaaS
 
-## 📍 État du projet — 25 juin 2026
+## 📍 État du projet — 2 juillet 2026
 
 ### Étape 1 — MVP ✅ TERMINÉE — 🚀 EN PRODUCTION
 
@@ -60,8 +60,22 @@ Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC,
 - **Backend** : déployé sur **Render** (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`). Variables d'env Render : `ANTHROPIC_API_KEY`, `ALLOWED_ORIGIN`.
 - **Frontend** : déployé sur **Vercel**. Variable d'env Vercel : `NEXT_PUBLIC_API_URL`.
 
-### Étape 2 — Persistance & Monétisation — non commencée
-PostgreSQL, authentification utilisateurs, abonnements Stripe.
+### Étape 2 — Persistance & Monétisation — en cours
+Auth Supabase (Lot 1 ✅), Persistance profil (Lot 2 ✅), Documents/historique & Numérotation (Lots 3 & 4 ✅), Stripe (Lot 5).
+
+**Étape 2 — Lot 1 : Authentification Supabase (2 juillet 2026) ✅**
+- **Backend** : `auth.py` — dépendance FastAPI `get_current_user` : vérification JWT Supabase par JWKS asymétrique RS256/ES256, singleton `PyJWKClient` (cache 5 min, rotation de clés automatique). `config.py` : +`supabase_url: str` + propriété dérivée `supabase_jwks_url`. Routes protégées par `Depends(get_current_user)` : `/quotes/generate`, `/quotes/import`, `/pdf/export`, `/word/export`. `/health` reste public. `requirements.txt` : +`PyJWT[crypto]>=2.8.0`. CORS : `Authorization` ajouté dans `allow_headers`.
+- **Frontend** : `@supabase/ssr` + `@supabase/supabase-js` installés. `supabase-client.ts` (`createBrowserClient`), `supabase-server.ts` (`createServerClient` + gestion cookies SSR, try/catch Server Components), `middleware.ts` (refresh session + protection routes, recréation `supabaseResponse` dans `setAll`, rien entre `createServerClient` et `getUser()`), `login/page.tsx` (login + inscription + écran "vérifiez votre e-mail"), `auth/confirm/route.ts` (callback `verifyOtp` email → session cookie → redirect `/`). `page.tsx` : email affiché + bouton déconnexion. `api.ts` : header `Authorization: Bearer` via `getSession()` (lecture locale, zéro round-trip) sur tous les appels backend.
+- **Config Supabase** : 3 tables avec RLS (`entreprises`, `clients`, `documents`) + colonnes de numérotation annuelle prévues (`compteur_devis_annee`, etc.). Login obligatoire dès ce lot, confirmation e-mail activée. JWT asymétrique (ES256/RS256) — JWKS URL : `https://ojuphphxvjpvvtsbbzpq.supabase.co/auth/v1/.well-known/jwks.json`.
+
+**Étape 2 — Lot 2 : Persistance profil entreprise (2 juillet 2026) ✅**
+- **Backend** : `models/profile.py` — `ProfileEntreprise` Pydantic (11 champs + `modele_prefere`), distinct d'`ArtisanInfo` pour ne pas modifier `quote.py`. `routers/profile.py` — `GET /profile` (404 si absent) + `PUT /profile` (upsert select-then-insert/update), chaque requête filtre `user_id = current_user.user_id`. `core/supabase_client.py` — singleton `get_supabase_admin()` via `lru_cache`, client service_role. `config.py` : `supabase_service_role_key: str` requis. `main.py` : router `/profile` monté + `PUT` ajouté aux méthodes CORS. `requirements.txt` : `supabase>=2.0.0` + `pydantic-settings>=2.4.0`.
+- **Frontend** : `lib/types.ts` : +`ProfileEntreprise`. `lib/api.ts` : +`getProfile()` (retourne `null` sur 404) + `saveProfile()`. `QuoteForm.tsx` : au montage → `getProfile()` → pré-rempli champs artisan + `onModeleLoaded` callback ; 404 → bannière migration localStorage si profil local détecté. Bouton "Enregistrer le profil" (en bas de la carte Mon entreprise) → `saveProfile()` + feedback OK/erreur. LocalStorage garde son rôle de cache/fallback. `page.tsx` : +`onModeleLoaded={setModele}` sur `QuoteForm`.
+
+**Étape 2 — Lots 3 & 4 : Documents, historique & numérotation automatique (2 juillet 2026) ✅**
+- **BDD** : Fonction Postgres `get_next_numero(p_user_id, p_type)` — `UPDATE entreprises SET compteur = CASE ... RETURNING` atomique (verrou de ligne), gère la remise à zéro annuelle dans le même UPDATE via CASE. Retourne `DEV-YYYY-NNN` / `FAC-YYYY-NNN`. Compteurs séparés : `compteur_devis` + `compteur_devis_annee`, `compteur_factures` + `compteur_factures_annee`.
+- **Backend** : `services/numero_service.py` — helper `get_next_numero()` appelle la RPC via client service_role. `models/document.py` — `DocumentCreate`, `DocumentSummary`, `DocumentDetail`, `StatusUpdate`, `StatusPatchResponse`. `routers/documents.py` — 4 endpoints filtrés `user_id` : `POST /documents` (auto-save brouillon + upsert client par nom), `GET /documents` (historique batch-fetch noms clients), `GET /documents/{id}` (payload complet), `PATCH /documents/{id}` (transition statut ; brouillon→envoyé appelle `get_next_numero` une seule fois). `main.py` : router `/documents` monté + `PATCH` ajouté aux méthodes CORS.
+- **Frontend** : `lib/types.ts` : +`DocumentCreate`, `DocumentSummary`, `DocumentDetail`, `StatusPatchResponse`. `lib/api.ts` : +`saveDocument()`, `listDocuments()`, `getDocument()`, `updateDocumentStatus()`. `page.tsx` : auto-save après génération et après import confirmé (`doAutoSave`), feedback discret "Brouillon enregistré ✓" (3 s), bouton "Historique" dans le header, badge statut + bouton "Marquer envoyé" dans la toolbar (assigne le numéro définitif et met à jour `result.numero_document`), réouverture d'un document depuis l'historique. `HistoriqueView.tsx` (nouveau) : liste des documents avec badges statut colorés (brouillon/envoyé/signé/payé), clic → `getDocument()` → QuotePreview.
 
 ### Étape 3 — Mobile & Vision — non commencée
 Saisie vocale (speech-to-text), vision IA (analyse plans/photos).
@@ -91,8 +105,8 @@ et produit un document PDF + Word prêt à envoyer au client.
 | IA | API Anthropic `claude-sonnet-4-6` | Tool Use pour les prix |
 | PDF | fpdf2 (pur Python) | WeasyPrint abandonné — incompatible Windows |
 | Word | python-docx (pur Python) | export .docx modifiable |
-| BDD | — | Étape 2 : PostgreSQL |
-| Auth | — | Étape 2 |
+| BDD | Supabase (Postgres managé) | 3 tables avec RLS — Lot 2 : persistance |
+| Auth | Supabase Auth | JWT asymétrique ES256/RS256 via JWKS, cookie SSR, `PyJWT[crypto]` |
 
 ---
 
@@ -122,9 +136,18 @@ npm run dev
 backend/app/
 ├── core/
 │   ├── config.py        # Settings via pydantic-settings (.env)
+│   │                    #   supabase_url: str + supabase_jwks_url (dérivée)
+│   │                    #   supabase_service_role_key: str (requis, Lot 2)
+│   ├── auth.py          # Dépendance get_current_user (Étape 2 Lot 1)
+│   │                    #   PyJWKClient singleton (cache 5 min), vérifie RS256/ES256
+│   │                    #   Retourne CurrentUser(user_id=sub, email)
+│   │                    #   HTTP 401 si token invalide/expiré, 403 si header absent
+│   ├── supabase_client.py  # Singleton get_supabase_admin() — client service_role (Lot 2)
+│   │                    #   ⚠️ Bypass RLS → filtrage user_id OBLIGATOIRE sur chaque requête
 │   └── prompts.py       # ⚠️ Prompts Claude ICI UNIQUEMENT — jamais inline dans les services
 ├── models/
-│   └── quote.py         # Source de vérité Pydantic
+│   ├── quote.py         # Source de vérité Pydantic (NE PAS MODIFIER sans plan)
+│   ├── profile.py       # ProfileEntreprise (Lot 2) — distinct d'ArtisanInfo
 │                        #   LigneDevis    : lot?, poste, description, quantite, unite,
 │                        #                   prix_unitaire_ht, tva_taux, source_prix
 │                        #   ArtisanInfo   : nom, siret, adresse, code_postal, ville,
@@ -142,10 +165,20 @@ backend/app/
 │                        #                   prix_personnalises?
 │                        #   QuoteResponse : success, devis?, error?, tokens_used?,
 │                        #                   import_meta? (UNIQUEMENT renseigné par l'import)
+│   └── document.py      # DocumentCreate, DocumentSummary, DocumentDetail,
+│                        #   StatusUpdate, StatusPatchResponse (Lots 3 & 4)
 ├── routers/
 │   ├── quotes.py        # POST /quotes/generate  +  POST /quotes/import
 │   ├── pdf.py           # POST /pdf/export
-│   └── word.py          # POST /word/export
+│   ├── word.py          # POST /word/export
+│   ├── profile.py       # GET /profile (404 si absent) + PUT /profile (upsert) — Lot 2
+│   │                    #   Dépend de get_current_user + get_supabase_admin
+│   │                    #   Filtrage user_id obligatoire (client service_role bypass RLS)
+│   └── documents.py     # POST /documents (brouillon + upsert client par nom) — Lots 3 & 4
+│                        #   GET /documents (historique, batch-fetch noms clients)
+│                        #   GET /documents/{id} (devis_payload complet pour réouverture)
+│                        #   PATCH /documents/{id} (statut ; brouillon→envoyé → get_next_numero)
+│                        #   Filtrage user_id obligatoire partout
 └── services/
     ├── claude_service.py  # Orchestration API Anthropic + boucle Tool Use agentic
     │                      #   ⚠️ Injection POST-GÉNÉRATION (jamais envoyé à Claude) :
@@ -158,6 +191,8 @@ backend/app/
     │                      #   _parse_import_response : détecte stop_reason="max_tokens",
     │                      #                            logue réponse brute sur échec
     │                      #   _inject_artisan : écrase artisan extrait par profil localStorage
+    ├── numero_service.py  # get_next_numero(user_id, type_doc) — appelle RPC Postgres (Lots 3 & 4)
+│                          #   Jamais d'incrément côté Python (race condition) — toujours via RPC
     ├── price_search.py    # Base de prix BTP 2026 + coefficients régionaux (12 régions)
     ├── pdf_service.py     # Génération PDF — fpdf2, A4
     │                      #   Modèle « moderne » : bandeau vert #14532D, Helvetica, lots #E3EDE6
@@ -183,8 +218,15 @@ frontend/src/
 ├── app/
 │   ├── page.tsx         # Chef d'orchestre : états result (Devis|null), documentType,
 │   │                    #   withTva, documentDate, modele ("moderne"|"pro")
+│   │                    #   userEmail + handleLogout (Étape 2 Lot 1)
 │   │                    #   DocTypeToggle + ModelToggle côte à côte (form screen)
+│   │                    #   onModeleLoaded={setModele} → QuoteForm (Lot 2)
 │   │                    #   layout max-w-5xl, palette verte #14532D
+│   ├── login/
+│   │   └── page.tsx     # Login + inscription + écran "vérifiez votre e-mail" (Lot 1)
+│   ├── auth/
+│   │   └── confirm/
+│   │       └── route.ts # Callback confirmation e-mail : verifyOtp → session → redirect / (Lot 1)
 │   └── globals.css      # Palette verte :
 │                        #   body #FAFAF7, .btn-primary #14532D→#0F3D21, radius 14px
 │                        #   .card radius 16px, ombre discrète, bordure rgba(20,83,45,.1)
@@ -196,12 +238,14 @@ frontend/src/
 │   │                    #   ② Région (select)
 │   │                    #   ③ Carte « Mon entreprise » accordéon — badge « Enregistré »
 │   │                    #     nom, SIRET, adresse, CP, ville, tel, email, site_web, logo, IBAN, BIC
+│   │                    #     Bouton « Enregistrer le profil » → PUT /profile (Lot 2)
 │   │                    #   ④ Bloc client (nom client, adresse chantier)
 │   │                    #   ⑤ « Mes prix habituels » accordéon
 │   │                    #   ⑥ « Remise & acompte » accordéon
 │   │                    #   ⑦ « Numéro de document » accordéon
-│   │                    #   modele reçu en prop depuis page.tsx → envoyé dans QuoteRequest
-│   │                    #   Persistance localStorage "artisan_profile" (champs artisan)
+│   │                    #   modele reçu en prop + onModeleLoaded callback (Lot 2)
+│   │                    #   Au montage : getProfile() → pré-rempli ; 404 → bannière migration LS
+│   │                    #   localStorage "artisan_profile" = cache/backup (plus source de vérité)
 │   │                    #   ⚠️ localStorage dans useEffect uniquement (pas useState)
 │   │
 │   ├── QuotePreview.tsx # Aperçu éditable inline
@@ -227,11 +271,22 @@ frontend/src/
 │   │                         #   (visible seulement si import_meta.emetteur.nom non null)
 │   │                         #   Bouton "Afficher l'aperçu" → handleConfirmImport (zéro appel Claude)
 │   ├── PdfExportButton.tsx   # Bouton export PDF
-│   └── WordExportButton.tsx  # Bouton export Word (.docx)
+│   ├── WordExportButton.tsx  # Bouton export Word (.docx)
+│   └── HistoriqueView.tsx   # Liste des documents (Lots 3 & 4)
+│                             #   Badges statut : brouillon/envoyé/signé/payé
+│                             #   Clic → getDocument(id) → onOpen → QuotePreview
 │
 └── lib/
     ├── api.ts           # generateQuote, importQuote, exportToPdf, exportToWord
+    │                    #   getProfile() → ProfileEntreprise | null (Lot 2)
+    │                    #   saveProfile(p) → PUT /profile (Lot 2)
+    │                    #   saveDocument(), listDocuments(), getDocument(id) (Lots 3 & 4)
+    │                    #   updateDocumentStatus(id, statut) → PATCH (assigne numéro si envoyé)
+    │                    #   authHeader() : getSession() → Authorization: Bearer (Lot 1)
+    ├── supabase-client.ts  # createBrowserClient — composants "use client" (Lot 1)
+    ├── supabase-server.ts  # createServerClient + cookies SSR — Server Components (Lot 1)
     └── types.ts         # Miroir EXACT des modèles Pydantic — toujours synchroniser
+                         #   ProfileEntreprise : 11 champs + modele_prefere (Lot 2)
                          #   Devis        : + modele?: string | null
                          #   QuoteRequest : + modele?: string
                          #   QuoteResponse: + import_meta?: ImportMeta
@@ -326,6 +381,23 @@ frontend/src/
 | 60 | Fix import gros PDF : `MAX_OUTPUT_TOKENS=8000`, `_parse_import_response` dédié (détection troncature, log brut), prompt renforcé (regroupement sous-puces, JSON pur). Validé facture SCM 6 pages | `import_service.py`, `prompts.py` |
 | 61 | Extraction enrichie à l'import : `document_type`, `numero_document_original`, `date_document_original`, `emetteur` complet (IBAN/BIC inclus), `conditions_paiement`, `acompte`. `import_meta` dans `QuoteResponse`. `numero_document_original` pré-remplit `devis.numero_document` | `import_service.py`, `prompts.py`, `quote.py`, `types.ts` |
 | 62 | Flux import → `ImportReview` → `QuotePreview` (zéro re-call Claude). Composant `ImportReview.tsx` : résumé extrait + toggle artisan "garder profil" (défaut) / "utiliser émetteur extrait". Merge émetteur côté frontend si "replace". `handleImported` met à jour `documentType` + `documentDate` depuis `import_meta` | `ImportReview.tsx`, `page.tsx` |
+| 63 | Auth backend : `get_current_user` FastAPI dependency — vérification JWT Supabase par JWKS (RS256/ES256), singleton `PyJWKClient`. Routes `/quotes/*`, `/pdf/export`, `/word/export` protégées. `supabase_url` + `supabase_jwks_url` dans `config.py`. CORS : `Authorization` dans `allow_headers` | `auth.py`, `config.py`, `quotes.py`, `pdf.py`, `word.py`, `main.py` |
+| 64 | Auth frontend : middleware SSR (refresh session + protection routes), `supabase-client.ts` / `supabase-server.ts`, callback `verifyOtp` e-mail, `login/page.tsx` (login + signup + "check email") | `middleware.ts`, `supabase-client.ts`, `supabase-server.ts`, `auth/confirm/route.ts`, `login/page.tsx` |
+| 65 | Header `Authorization: Bearer` sur tous les appels backend via `authHeader()` (`getSession()` local, zéro round-trip). Email utilisateur + bouton déconnexion dans le header | `api.ts`, `page.tsx` |
+| 66 | Client Supabase service_role `get_supabase_admin()` singleton (Lot 2) — bypass RLS, filtrage `user_id` obligatoire sur chaque requête | `supabase_client.py`, `config.py` |
+| 67 | `GET /profile` + `PUT /profile` protégés — upsert profil entreprise (11 champs + `modele_prefere`), filtrage `user_id = current_user.user_id` | `routers/profile.py`, `models/profile.py` |
+| 68 | Chargement profil au montage de `QuoteForm` : backend → pré-rempli champs artisan + pré-positionne le sélecteur de modèle via `onModeleLoaded`. Fallback localStorage silencieux si erreur réseau | `QuoteForm.tsx`, `api.ts`, `page.tsx` |
+| 69 | Bouton « Enregistrer le profil » dans la carte Mon entreprise → `saveProfile()` → feedback OK/erreur. Bannière migration si profil localStorage détecté et base vide | `QuoteForm.tsx` |
+| 70 | Fonction Postgres `get_next_numero(user_id, type)` — UPDATE atomique (verrou ligne), reset annuel dans le même CASE, retourne `DEV-YYYY-NNN` / `FAC-YYYY-NNN` | Supabase SQL Editor |
+| 71 | `services/numero_service.py` — helper Python appelle la RPC `get_next_numero` via client service_role. Jamais d'incrément côté Python | `numero_service.py` |
+| 72 | `POST /documents` — auto-save brouillon + upsert client (clé : user_id + nom). Retourne `DocumentDetail` | `routers/documents.py`, `models/document.py` |
+| 73 | `GET /documents` — historique trié récent→ancien, batch-fetch noms clients | `routers/documents.py` |
+| 74 | `GET /documents/{id}` — payload `devis_payload` complet pour réouverture dans QuotePreview | `routers/documents.py` |
+| 75 | `PATCH /documents/{id}` — mise à jour statut ; transition brouillon→envoyé appelle `get_next_numero` une seule fois et assigne le numéro définitif | `routers/documents.py`, `numero_service.py` |
+| 76 | `DocumentCreate`, `DocumentSummary`, `DocumentDetail`, `StatusPatchResponse` dans types.ts (miroir Pydantic) | `types.ts`, `models/document.py` |
+| 77 | `saveDocument()`, `listDocuments()`, `getDocument()`, `updateDocumentStatus()` dans api.ts | `api.ts` |
+| 78 | Auto-save post-génération et post-import (`doAutoSave`) + feedback discret « Brouillon enregistré ✓ » (3 s) + badge statut dans toolbar + bouton « Marquer envoyé » → assigne numéro définitif + met à jour `numero_document` dans QuotePreview | `page.tsx` |
+| 79 | `HistoriqueView.tsx` — liste des documents (badges statut colorés, TTC, date, client). Clic → `getDocument()` → réouverture dans QuotePreview. Bouton « Historique » dans le header | `HistoriqueView.tsx`, `page.tsx` |
 
 ---
 
@@ -333,9 +405,7 @@ frontend/src/
 
 | Priorité | Tâche | Détail |
 |---|---|---|
-| Haute | BDD PostgreSQL | Persistance des devis, comptes artisans |
-| Haute | Authentification | JWT, sessions, rôles |
-| Haute | Stripe | Abonnements, facturation SaaS |
+| Haute | **Lot 5 — Stripe** | Abonnements Freemium/Pro, quotas devis/mois. |
 
 ---
 
@@ -361,6 +431,12 @@ frontend/src/
 | **Remise TVA** | Remise sur HT brut. TVA recalculée : `ratio = total_ht_net / total_ht`, `tva_par_ligne *= ratio`. |
 | **TTC éditable** | `ratio = new_ttc / old_ttc` appliqué à chaque `prix_unitaire_ht`. `computeTotaux` recalcule tout. La remise fixe n'est pas rescalée (comportement voulu). |
 | **Colonne Unité** | Séparée de Qté depuis la refonte. PDF with_tva : [34,54,12,13,22,14,31]. Word with_tva : [2.8,5.5,1.0,1.2,2.1,1.5,2.9] cm. |
+| **Supabase service_role + user_id** | Client service_role dans `supabase_client.py` bypass toute la RLS. En contrepartie, CHAQUE requête SQL DOIT appliquer `.eq("user_id", current_user.user_id)` manuellement. Ne jamais oublier ce filtre dans un nouveau routeur. |
+| **ProfileEntreprise ≠ ArtisanInfo** | `ProfileEntreprise` (Lot 2, `models/profile.py`) est distinct d'`ArtisanInfo` (`quote.py`) pour ne pas modifier `quote.py`. Le frontend mappe l'un vers l'autre dans `QuoteForm.tsx`. Toute modification du profil passe par `ProfileEntreprise`, pas par `ArtisanInfo`. |
+| **Source de vérité profil** | Backend Supabase = source de vérité. `localStorage["artisan_profile"]` = cache/backup. Au montage de `QuoteForm` : `getProfile()` est toujours appelé en premier. Fallback localStorage uniquement sur erreur réseau/auth. |
+| **Numérotation atomique via RPC Postgres** | `get_next_numero(user_id, type)` fait un seul `UPDATE ... SET compteur = CASE WHEN annee != annee_courante THEN 1 ELSE compteur+1 END RETURNING`. Verrou de ligne PostgreSQL = pas de race condition. Jamais d'incrément côté Python. Le numéro est attribué uniquement à la transition brouillon→envoyé (légalité : séquence continue sans trou). |
+| **`devis_payload` JSONB + colonnes indexées** | Le `Devis` complet est stocké en JSONB dans `documents.devis_payload`. Les colonnes `type_doc`, `numero`, `total_ttc`, `statut`, `date_document`, `client_id` sont des colonnes séparées pour la liste (évite de parser le JSONB). La liste (`GET /documents`) batch-fetche les noms clients en une 2e requête sur `clients`. |
+| **Statuts document** | `brouillon` (défaut, auto-save post-génération) → `envoyé` (assigne numéro définitif via RPC) → `signé` → `payé`. La transition brouillon→envoyé est la seule qui déclenche la numérotation. Les transitions suivantes sont des mises à jour de statut simples. |
 | **Texte invisible PDF — bug récurrent** | `fpdf2` : `set_text_color` est un **état global persistant**. Le blanc des bandeaux (`_draw_table_header`, bandeau LOT, `_tot_row_accent`) saigne sur les lignes suivantes si non réinitialisé immédiatement. **3 règles à NE JAMAIS CASSER** lors de toute modification de `pdf_service.py` : (A) `_set_body()` existe et reset text_color + draw_color + line_width ; (B) `_set_body()` + `pdf.set_font(FONT,"",8)` IMMÉDIATEMENT avant la boucle de cellules de chaque ligne prestation (deux appels : en début de loop iter et juste après le rect LIGHT_GRAY) ; (C) `_set_body()` après CHAQUE élément à texte blanc (header, LOT, TTC). |
 
 ---
@@ -375,3 +451,6 @@ frontend/src/
 - **Les infos sensibles ne passent jamais par Claude** — injectées dans `claude_service.py` après génération. Le champ `modele` suit la même règle.
 - **Nouvelles dépendances Python** → ajouter dans `requirements.txt` ET installer dans le venv
 - **Variables d'env en production** → ne jamais les coder en dur ; les définir dans le dashboard Render (backend) ou Vercel (frontend)
+- **`SUPABASE_SERVICE_ROLE_KEY`** → jamais côté frontend, jamais dans git — Lot 2 uniquement (appels admin Supabase depuis le backend)
+- **`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`** (`sb_publishable_*`) → sûre côté frontend, protégée par RLS
+- **`get_current_user`** → dépendance FastAPI dans tous les routers qui touchent les données utilisateur. Ne jamais bypasser. `/health` seul endpoint public autorisé.
