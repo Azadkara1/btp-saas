@@ -85,6 +85,7 @@ export default function HomePage() {
   const [savedDocumentId, setSavedDocumentId]       = useState<string | null>(null);
   const [savedDocumentStatut, setSavedDocumentStatut] = useState<string>("brouillon");
   const [saveFeedback, setSaveFeedback]             = useState<"saving" | "saved" | "error" | null>(null);
+  const [markEnvoyeError, setMarkEnvoyeError]       = useState<string | null>(null);
 
   // Recalcule le nom de fichier si non personnalisé (numero_document ou client peut avoir changé)
   useEffect(() => {
@@ -98,6 +99,8 @@ export default function HomePage() {
     try {
       const payload: DocumentCreate = {
         type_doc: docType,
+        titre: buildDefaultFilename(devis, docType),
+        numero_document: devis.numero_document ?? null,
         date_document: date,
         devis_payload: devis,
         total_ttc: devis.totaux.total_ttc,
@@ -199,13 +202,19 @@ export default function HomePage() {
 
   const handleMarkEnvoye = async () => {
     if (!savedDocumentId) return;
+    setMarkEnvoyeError(null);
     try {
       const r = await updateDocumentStatus(savedDocumentId, "envoyé");
       setSavedDocumentStatut("envoyé");
       if (r.numero && result) {
         setResult({ ...result, numero_document: r.numero });
       }
-    } catch { /* feedback silencieux — l'artisan peut réessayer */ }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[MARK ENVOYÉ] échec — savedDocumentId:", savedDocumentId, "erreur:", msg);
+      setMarkEnvoyeError(msg);
+      setTimeout(() => setMarkEnvoyeError(null), 8000);
+    }
   };
 
   const handleOpenFromHistory = (devis: Devis, docId: string, statut: string, typeDoc: string) => {
@@ -354,6 +363,12 @@ export default function HomePage() {
                     style={{ backgroundColor: "#1D4ED8", color: "white" }}>
                     <Send className="w-3.5 h-3.5" /> Marquer envoyé
                   </button>
+                )}
+                {markEnvoyeError && (
+                  <span className="text-xs px-2.5 py-1.5 rounded-full font-medium"
+                    style={{ backgroundColor: "#FEF2F2", color: "#B91C1C" }}>
+                    ⚠ {markEnvoyeError}
+                  </span>
                 )}
                 <PdfExportButton devis={result} documentType={documentType} withTva={withTva} documentDate={documentDate} filename={filename || undefined} />
                 <WordExportButton devis={result} documentType={documentType} withTva={withTva} documentDate={documentDate} filename={filename || undefined} />

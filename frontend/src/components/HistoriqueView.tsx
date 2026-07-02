@@ -101,7 +101,7 @@ export default function HistoriqueView({ onOpen }: HistoriqueViewProps) {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm" style={{ color: "#18211C" }}>
-                          {doc.numero ?? ((doc.type_doc === "facture" ? "Facture" : "Devis") + " — brouillon")}
+                          {doc.titre ?? (doc.type_doc === "facture" ? "Facture" : "Devis")}
                         </span>
                         <span className="text-xs px-2 py-0.5 rounded-full font-medium"
                           style={{ color: sc.color, backgroundColor: sc.bg }}>
@@ -109,7 +109,7 @@ export default function HistoriqueView({ onOpen }: HistoriqueViewProps) {
                         </span>
                       </div>
                       <p className="text-xs truncate mt-0.5" style={{ color: "#7C857F" }}>
-                        {doc.client_nom ?? "Client non renseigné"}
+                        {[doc.numero_document, doc.client_nom].filter(Boolean).join(" · ")}
                         {doc.date_document ? ` · ${fmtDate(doc.date_document)}` : ""}
                       </p>
                     </div>

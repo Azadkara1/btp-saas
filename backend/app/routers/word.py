@@ -2,16 +2,20 @@
 Router FastAPI pour l'export Word (.docx).
 Route principale : POST /word/export
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 from app.models.pdf import PdfRequest
 from app.services.word_service import generate_quote_docx
+from app.core.auth import CurrentUser, get_current_user
 
 router = APIRouter(prefix="/word", tags=["Word"])
 
 
 @router.post("/export")
-async def export_word(request: PdfRequest):
+async def export_word(
+    request: PdfRequest,
+    _user: CurrentUser = Depends(get_current_user),
+):
     """
     Génère et retourne un fichier .docx du devis.
     Permet à l'artisan ou au client de modifier le document dans Word/LibreOffice.

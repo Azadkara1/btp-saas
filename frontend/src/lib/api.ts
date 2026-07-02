@@ -133,7 +133,11 @@ export async function updateDocumentStatus(id: string, statut: string): Promise<
     headers: { "Content-Type": "application/json", ...await authHeader() },
     body: JSON.stringify({ statut }),
   });
-  if (!response.ok) throw new Error(`Erreur ${response.status}`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const detail = body?.detail ?? `HTTP ${response.status}`;
+    throw new Error(detail);
+  }
   return response.json();
 }
 

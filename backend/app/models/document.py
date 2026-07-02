@@ -3,9 +3,11 @@ from typing import Optional
 
 
 class DocumentCreate(BaseModel):
-    type_doc: str  # "devis" | "facture"
-    date_document: Optional[str] = None  # ISO date "YYYY-MM-DD"
-    devis_payload: dict  # Devis complet sérialisé
+    type_doc: str
+    titre: Optional[str] = None
+    numero_document: Optional[str] = None
+    date_document: Optional[str] = None
+    devis_payload: dict
     total_ttc: Optional[float] = None
     client_nom: Optional[str] = None
     client_adresse: Optional[str] = None
@@ -16,7 +18,9 @@ class DocumentCreate(BaseModel):
 class DocumentSummary(BaseModel):
     id: str
     type_doc: str
+    titre: Optional[str] = None
     numero: Optional[str] = None
+    numero_document: Optional[str] = None
     client_nom: Optional[str] = None
     total_ttc: Optional[float] = None
     statut: str

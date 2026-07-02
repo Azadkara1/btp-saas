@@ -2,16 +2,20 @@
 Router FastAPI pour l'export PDF.
 Route principale : POST /pdf/export
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 from app.models.pdf import PdfRequest
 from app.services.pdf_service import generate_quote_pdf
+from app.core.auth import CurrentUser, get_current_user
 
 router = APIRouter(prefix="/pdf", tags=["PDF"])
 
 
 @router.post("/export")
-async def export_pdf(request: PdfRequest):
+async def export_pdf(
+    request: PdfRequest,
+    _user: CurrentUser = Depends(get_current_user),
+):
     """
     Génère et retourne un PDF du devis.
     Le fichier est retourné directement en bytes (application/pdf).

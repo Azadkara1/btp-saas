@@ -152,6 +152,8 @@ export interface QuoteResponse {
 // ── Documents (Lots 3 & 4) ───────────────────────────────────────
 export interface DocumentCreate {
   type_doc: string;
+  titre?: string | null;
+  numero_document?: string | null;
   date_document?: string | null;
   devis_payload: Devis;
   total_ttc?: number | null;
@@ -164,7 +166,9 @@ export interface DocumentCreate {
 export interface DocumentSummary {
   id: string;
   type_doc: string;
+  titre?: string | null;
   numero?: string | null;
+  numero_document?: string | null;
   client_nom?: string | null;
   total_ttc?: number | null;
   statut: string;

@@ -8,9 +8,13 @@ PATCH  /documents/{id}   → mise à jour statut ; brouillon→envoyé attribue 
 
 ⚠️  Client service_role : filtrage user_id obligatoire sur chaque requête.
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.auth import get_current_user, CurrentUser
+
+logger = logging.getLogger(__name__)
 from app.core.supabase_client import get_supabase_admin
 from app.models.document import (
     DocumentCreate,
@@ -70,6 +74,8 @@ def create_document(
             "user_id": uid,
             "client_id": client_id,
             "type_doc": body.type_doc,
+            "titre": body.titre,
+            "numero_document": body.numero_document,
             "date_document": body.date_document,
             "devis_payload": body.devis_payload,
             "total_ttc": body.total_ttc,
@@ -82,7 +88,9 @@ def create_document(
     return DocumentDetail(
         id=row["id"],
         type_doc=row["type_doc"],
+        titre=row.get("titre"),
         numero=row.get("numero"),
+        numero_document=row.get("numero_document"),
         client_nom=body.client_nom,
         total_ttc=float(row["total_ttc"]) if row.get("total_ttc") is not None else None,
         statut=row["statut"],
@@ -102,7 +110,7 @@ def list_documents(current_user: CurrentUser = Depends(get_current_user)):
     try:
         docs_res = (
             db.table("documents")
-            .select("id, type_doc, numero, client_id, total_ttc, statut, date_document, created_at")
+            .select("id, type_doc, titre, numero, numero_document, client_id, total_ttc, statut, date_document, created_at")
             .eq("user_id", uid)
             .order("created_at", desc=True)
             .execute()
@@ -132,7 +140,9 @@ def list_documents(current_user: CurrentUser = Depends(get_current_user)):
         DocumentSummary(
             id=d["id"],
             type_doc=d["type_doc"],
+            titre=d.get("titre"),
             numero=d.get("numero"),
+            numero_document=d.get("numero_document"),
             client_nom=client_map.get(d.get("client_id", "")),
             total_ttc=float(d["total_ttc"]) if d.get("total_ttc") is not None else None,
             statut=d["statut"],
@@ -185,7 +195,9 @@ def get_document(doc_id: str, current_user: CurrentUser = Depends(get_current_us
     return DocumentDetail(
         id=row["id"],
         type_doc=row["type_doc"],
+        titre=row.get("titre"),
         numero=row.get("numero"),
+        numero_document=row.get("numero_document"),
         client_nom=client_nom,
         total_ttc=float(row["total_ttc"]) if row.get("total_ttc") is not None else None,
         statut=row["statut"],
@@ -217,25 +229,40 @@ def patch_document_status(
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
+    logger.info(
+        "[PATCH] doc_id=%s uid=%s statut_reçu=%r lignes_trouvées=%d",
+        doc_id, uid, update.statut, len(existing.data) if existing.data else 0,
+    )
+
     if not existing.data:
+        logger.warning("[PATCH] 404 — document introuvable pour doc_id=%s uid=%s", doc_id, uid)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
 
     doc = existing.data[0]
     update_data: dict = {"statut": update.statut}
 
-    # Attribution du numéro définitif à la première transition → "envoyé"
+    # Attribution du numéro séquentiel légal à la première transition → "envoyé"
     if (
         update.statut == "envoyé"
         and doc["statut"] == "brouillon"
         and not doc["numero"]
     ):
         type_rpc = "facture" if doc["type_doc"] == "facture" else "devis"
-        update_data["numero"] = get_next_numero(uid, type_rpc)
+        numero = get_next_numero(uid, type_rpc)
+        logger.info("[PATCH] numéro attribué par RPC : %r", numero)
+        update_data["numero"] = numero
 
     try:
         db.table("documents").update(update_data).eq("id", doc_id).eq("user_id", uid).execute()
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error(
+            "[PATCH] ÉCHEC UPDATE documents — doc_id=%s update_data=%r erreur=%s",
+            doc_id, update_data, exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Mise à jour échouée : {exc}",
+        )
 
     return StatusPatchResponse(
         statut=update.statut,

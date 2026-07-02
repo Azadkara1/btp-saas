@@ -1,13 +1,14 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { Loader2, Wand2, Plus, X, ChevronDown, Building2, CheckCircle2 } from "lucide-react";
-import { generateQuote } from "@/lib/api";
-import { QuoteRequest, QuoteResponse, PrixArtisan } from "@/lib/types";
+import { Loader2, Wand2, Plus, X, ChevronDown, Building2, CheckCircle2, Save } from "lucide-react";
+import { generateQuote, getProfile, saveProfile } from "@/lib/api";
+import { QuoteRequest, QuoteResponse, PrixArtisan, ProfileEntreprise } from "@/lib/types";
 
 interface QuoteFormProps {
   onQuoteGenerated: (response: QuoteResponse) => void;
   modele?: string;
   docType?: "devis" | "facture";
+  onModeleLoaded?: (m: string) => void;
 }
 
 const REGIONS = [
@@ -82,7 +83,7 @@ function Collapsible({
   );
 }
 
-export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, docType = "devis" }: QuoteFormProps) {
+export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, docType = "devis", onModeleLoaded }: QuoteFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<Warning[] | null>(null);
@@ -110,17 +111,66 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
   const [form, setForm] = useState<QuoteRequest>(DEFAULT_FORM);
   const [hasStoredProfile, setHasStoredProfile] = useState(false);
 
+  // ── États Lot 2 ─────────────────────────────────────────────────
+  const [showMigrationBanner, setShowMigrationBanner] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaveOk, setProfileSaveOk] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState(false);
+
+  // ── Chargement profil au montage (backend → localStorage en fallback) ──
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(ARTISAN_LS_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setForm(prev => ({ ...prev, ...parsed }));
-        setHasStoredProfile(!!parsed.artisan_nom || !!parsed.artisan_siret);
+    async function initProfile() {
+      try {
+        const profile = await getProfile();
+        if (profile) {
+          // Source de vérité : base Supabase
+          setForm(prev => ({
+            ...prev,
+            artisan_nom:          profile.nom          ?? "",
+            artisan_siret:        profile.siret        ?? "",
+            artisan_adresse:      profile.adresse      ?? "",
+            artisan_code_postal:  profile.code_postal  ?? "",
+            artisan_ville:        profile.ville        ?? "",
+            artisan_telephone:    profile.telephone    ?? "",
+            artisan_email:        profile.email        ?? "",
+            artisan_site_web:     profile.site_web     ?? "",
+            artisan_logo_base64:  profile.logo_base64  ?? "",
+            artisan_iban:         profile.iban         ?? "",
+            artisan_bic:          profile.bic          ?? "",
+          }));
+          setHasStoredProfile(!!(profile.nom || profile.siret));
+          if (profile.modele_prefere && onModeleLoaded) {
+            onModeleLoaded(profile.modele_prefere);
+          }
+        } else {
+          // Aucun profil en base → chercher une migration localStorage
+          try {
+            const saved = localStorage.getItem(ARTISAN_LS_KEY);
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (parsed.artisan_nom || parsed.artisan_siret) {
+                setShowMigrationBanner(true);
+              }
+            }
+          } catch {}
+        }
+      } catch {
+        // Erreur réseau ou auth → fallback localStorage silencieux
+        try {
+          const saved = localStorage.getItem(ARTISAN_LS_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            setForm(prev => ({ ...prev, ...parsed }));
+            setHasStoredProfile(!!(parsed.artisan_nom || parsed.artisan_siret));
+          }
+        } catch {}
       }
-    } catch {}
+    }
+    initProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Cache localStorage (backup — la base reste la source de vérité) ──
   useEffect(() => {
     localStorage.setItem(ARTISAN_LS_KEY, JSON.stringify({
       artisan_nom: form.artisan_nom,
@@ -143,8 +193,6 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
     form.artisan_logo_base64,
   ]);
 
-  // Numéro de document : champ libre, pas d'auto-incrémentation
-
   // Fermeture du dropdown au clic extérieur
   useEffect(() => {
     if (!dropdownOpen) return;
@@ -156,7 +204,7 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
     return () => document.removeEventListener("mousedown", handler);
   }, [dropdownOpen]);
 
-  // CP → Ville via geo.api.gouv.fr (T3)
+  // CP → Ville via geo.api.gouv.fr
   const fetchVillesByCp = async (
     cp: string,
     setOptions: (opts: string[]) => void,
@@ -185,6 +233,51 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
       setForm(prev => ({ ...prev, artisan_logo_base64: dataUrl }));
     };
     reader.readAsDataURL(file);
+  };
+
+  // ── Sauvegarde profil en base ────────────────────────────────────
+  const handleSaveProfile = async () => {
+    setProfileSaving(true);
+    setProfileSaveOk(false);
+    setProfileSaveError(false);
+    try {
+      const profile: ProfileEntreprise = {
+        nom:          form.artisan_nom          || null,
+        siret:        form.artisan_siret        || null,
+        adresse:      form.artisan_adresse      || null,
+        code_postal:  form.artisan_code_postal  || null,
+        ville:        form.artisan_ville        || null,
+        telephone:    form.artisan_telephone    || null,
+        email:        form.artisan_email        || null,
+        site_web:     form.artisan_site_web     || null,
+        logo_base64:  form.artisan_logo_base64  || null,
+        iban:         form.artisan_iban         || null,
+        bic:          form.artisan_bic          || null,
+        modele_prefere: modeleFromPage || "moderne",
+      };
+      await saveProfile(profile);
+      setProfileSaveOk(true);
+      setHasStoredProfile(!!(form.artisan_nom || form.artisan_siret));
+      setTimeout(() => setProfileSaveOk(false), 3000);
+    } catch {
+      setProfileSaveError(true);
+      setTimeout(() => setProfileSaveError(false), 3000);
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  // ── Import depuis localStorage (migration) ──────────────────────
+  const handleImportFromLocalStorage = () => {
+    try {
+      const saved = localStorage.getItem(ARTISAN_LS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setForm(prev => ({ ...prev, ...parsed }));
+        setHasStoredProfile(!!(parsed.artisan_nom || parsed.artisan_siret));
+      }
+    } catch {}
+    setShowMigrationBanner(false);
   };
 
   const [prixList, setPrixList] = useState<PrixArtisan[]>([]);
@@ -243,6 +336,33 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
 
   return (
     <div className="space-y-4">
+
+      {/* ── Bannière migration localStorage ─────────────────────── */}
+      {showMigrationBanner && (
+        <div className="rounded-xl px-4 py-3 flex flex-wrap items-start justify-between gap-3"
+          style={{ backgroundColor: "#FFFBEB", border: "1px solid #FCD34D" }}>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: "#92400E" }}>
+              Profil enregistré localement détecté
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: "#B45309" }}>
+              Importez vos infos entreprise puis cliquez sur &ldquo;Enregistrer le profil&rdquo; pour les sauvegarder en base.
+            </p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button type="button" onClick={handleImportFromLocalStorage}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+              style={{ backgroundColor: "#F59E0B", color: "#fff" }}>
+              Importer mon ancien profil enregistré
+            </button>
+            <button type="button" onClick={() => setShowMigrationBanner(false)}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors"
+              style={{ borderColor: "#FCD34D", color: "#92400E" }}>
+              Ignorer
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Carte principale : description ───────────────────────── */}
       <div className="card space-y-4">
@@ -447,6 +567,32 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
             <input name="artisan_bic" value={form.artisan_bic} onChange={handleChange}
               placeholder="BNPAFRPPXXX" className="input-field" />
           </Field>
+        </div>
+
+        {/* ── Bouton Enregistrer le profil en base ── */}
+        <div className="pt-2 flex items-center gap-3 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={handleSaveProfile}
+            disabled={profileSaving}
+            className="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors disabled:opacity-50"
+            style={{ backgroundColor: "#14532D", color: "#fff" }}
+          >
+            {profileSaving
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Save className="w-4 h-4" />}
+            Enregistrer le profil
+          </button>
+          {profileSaveOk && (
+            <span className="flex items-center gap-1 text-sm font-medium" style={{ color: "#14532D" }}>
+              <CheckCircle2 className="w-4 h-4" /> Profil enregistré en base
+            </span>
+          )}
+          {profileSaveError && (
+            <span className="text-sm font-medium" style={{ color: "#B91C1C" }}>
+              Erreur lors de la sauvegarde
+            </span>
+          )}
         </div>
       </Collapsible>
 

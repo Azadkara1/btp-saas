@@ -18,8 +18,16 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     allowed_origin: str = "http://localhost:3000"  # CORS — override via ALLOWED_ORIGIN env var
 
-    # ── Étape 2 (à remplir plus tard) ───────────────────────────
-    # database_url: str = ""
+    # ── Supabase — Étape 2 ──────────────────────────────────────
+    supabase_url: str = ""  # ex: https://ojuphphxvjpvvtsbbzpq.supabase.co
+    supabase_service_role_key: str  # Lot 2 — jamais côté frontend, jamais dans git
+
+    @property
+    def supabase_jwks_url(self) -> str:
+        """URL du endpoint JWKS Supabase, dérivée de supabase_url."""
+        return f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
+
+    # ── Stripe (Lot 4) ───────────────────────────────────────────
     # stripe_secret_key: str = ""
 
     class Config:
