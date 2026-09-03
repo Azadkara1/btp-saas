@@ -1,84 +1,16 @@
 # CLAUDE.md — Contexte projet BTP SaaS
 
-## 📍 État du projet — 2 juillet 2026
+> 📜 Historique détaillé de chaque batch/lot (ce qui a été fait, quand, pourquoi) : voir [CHANGELOG.md](./CHANGELOG.md). Ce fichier-ci ne garde que ce qui aide à écrire du code aujourd'hui.
 
-### Étape 1 — MVP ✅ TERMINÉE — 🚀 EN PRODUCTION
+## 📍 État d'avancement
 
-**Batch 1 (12 juin 2026) ✅**
-Génération IA, export PDF + Word, édition inline (toutes colonnes), IBAN/BIC, logo artisan, groupement LOT, pagination multi-pages, validation formulaire artisan, numéro de document, dropdown prestations BTP (9 groupes), remise (% ou montant fixe) + acompte, format monétaire français, signature client, mentions légales + RIB.
-
-**Batch 2 (12 juin 2026) ✅**
-- Palette verte premium (`#14532D`) + modèles moderne / pro
-- CP → Ville autocomplete via geo.api.gouv.fr (artisan et client)
-- CP + Ville client affichés dans QuotePreview
-- Prix identiques : diversification via `price_search.py` + avertissement log
-- Validité devis (`validite_jours`) + conditions paiement (`conditions_paiement`) dans modèles
-- Mentions légales différenciées devis / facture (+ art. 293 B CGI si sans TVA)
-- TTC arrondi : dernière ligne absorbe l'écart d'arrondi
-- Hauteur box client/chantier bornée à 55 mm, description tronquée à 500 chars
-
-**Batch 3 — Passe finale (12 juin 2026) ✅**
-- **PDF pagination par sections** : LOT complet = bloc insécable (bandeau + lignes + sous-total).
-- **Footer insécable** : mentions légales + RIB + zone signature.
-- **Numéro de document libre** : champ vide par défaut, sans auto-incrément.
-- **Validité libre** : champ libre, vide → aucune mention de validité dans le PDF/Word.
-- **Chantier éditable** dans QuotePreview (EditableText multiline).
-- **Bug sans TVA** corrigé : mentions "TVA X%" masquées, seul art. 293 B CGI affiché.
-- **CORS restreint** + **Rate limiting** 10 req/min.
-
-**Batch 4 — Consolidation & bugfixes (13 juin 2026) ✅**
-- **Fix texte invisible sur lignes prestation** : `_draw_table_header()` et `_tot_row_accent()` laissaient le text_color en blanc après leurs bandeaux → lignes prestation invisibles en cas de saut de page (big_lot) ou après la ligne TTC verte. Ajout de `_set_body()` helper + reset systématique.
-- **Fix CP + Ville client dans PDF et Word** : champ `code_postal` et `ville` absents du schéma JSON du prompt → Claude ne les générait jamais. Ajout dans le schéma client du prompt + passage de ces valeurs dans le message utilisateur si l'artisan les a renseignées.
-- **Consolidation `pdf_service.py`** : constante `MUTED_TEXT` par modèle, helper `_set_body()` (reset texte + trait + épaisseur), remplacement de tous les ternaires inline `P_GRAY if is_pro else (100,116,139)`.
-- **Logging** : trace `[INJECT CLIENT]` dans `claude_service.py`, `[PDF]` et `[WORD]` pour déboguer la chaîne CP/Ville.
-
-**Batch 5 — Correctifs critiques (13 juin 2026) ✅**
-- **Fix texte invisible PDF (définitif)** : `_set_body()` et `_set_white()` déplacés AVANT l'en-tête (ligne ~106) pour être utilisables partout. `_set_body()` maintenant appelé : fin de l'en-tête (après `numero_document`), après chaque bandeau LOT, avant chaque sous-total. Couleur corps par modèle : moderne `#18211C`, pro `#1F2937`. Tous les `set_text_color(*WHITE)` remplacés par `_set_white()` pour la lisibilité.
-- **Fix CP + Ville client (définitif)** : injection post-génération rendue INCONDITIONNELLE dans `claude_service.py` — écrase toujours ce que Claude aurait pu produire, normalise `""` → `None`. Log renommé `[INJECT CLIENT CP/VILLE]`.
-
-**Batch 6 — Améliorations éditeur devis (19 juin 2026) ✅**
-- **T1 — Fix visibilité `validite_jours`** : valeur affichée et éditable dans l'en-tête QuotePreview (input inline sous la date). Plus de désynchronisation entre aperçu et PDF.
-- **T2 — Champs éditables post-génération** : `validite_jours` (en-tête), `conditions_paiement` (bas de page, input inline), `mentions_legales` (chaque mention cliquable + ajouter/supprimer + bouton **"Régénérer les mentions"** pour revenir aux mentions Claude originales). Toutes les modifications propagées via `onUpdate → page.tsx`.
-- **T3 — Ajout/suppression de lignes** : bouton "+ Ajouter une ligne" par groupe LOT (mode LOT) ou global (mode sans lot) ; icône poubelle hover par ligne (min 1 ligne conservée).
-- **T4 — `quantite` Optional ("au réel")** : `quantite: Optional[float] = Field(None, ge=0)` dans `quote.py`. `null` = "au réel" (traité ×1 dans tous les calculs). Propagé dans `types.ts` (`number | null`), `pdf_service.py` et `word_service.py` (colonne Qté affiche "au réel"), `QuotePreview.tsx` (bouton × pour passer en null, clic sur "au réel" pour définir une quantité).
-
-**Batch 7 — Éditeur & export (25 juin 2026) ✅**
-- **`numero_document` éditable inline dans QuotePreview** : champ input transparent dans l'en-tête droit (entre le titre "DEVIS/Facture" et la date), même pattern que `validite_jours` au Batch 6 — état local `localNumeroDoc`, ajouté dans `_buildDevis`, propagé via `onUpdate → page.tsx → PDF/Word`. Vide → `null` → comportement existant (pas de numéro dans le document). Aucune modification de `quote.py`.
-- **Nom de fichier personnalisable avant téléchargement** : champ "Nom du fichier" partagé dans la toolbar de `page.tsx` (près des boutons PDF/Word). Pré-rempli automatiquement au format `Devis_<numero>_<client>` ou `Facture_...`, caractères interdits nettoyés, max 80 chars. Recalculé automatiquement si le n° de document ou le client change (via `useEffect` + flag `filenameCustomized`). L'extension `.pdf` / `.docx` est ajoutée par chaque bouton. Dès que l'artisan modifie manuellement le nom, le flag bloque le recalcul automatique.
-
-**Batch 8 — Amélioration de l'import (25 juin 2026) ✅**
-- **C — Fix import gros PDF** : `MAX_OUTPUT_TOKENS` porté à 8 000 (était 4 096 → stop_reason="max_tokens" sur ~50 lignes → JSON tronqué → crash). `_parse_import_response()` dédié à l'import : détecte explicitement la troncature, logue la réponse brute sur échec, strip défensif des fences ```json. Prompt renforcé : regroupement obligatoire des sous-puces dans `description` (max 80 chars), règle JSON pur "commence IMMÉDIATEMENT par `{`". Validé sur facture SCM 6 pages (206 Ko, 40 lignes, HTTP 200).
-- **B — Extraction enrichie** : `IMPORT_EXTRACTION_PROMPT` étendu — `document_type` (ne jamais convertir une facture en devis), `numero_document_original`, `date_document_original`, `emetteur` complet (nom, SIRET, adresse, CP, ville, tél, email, site_web, **IBAN, BIC** — extraits car déjà imprimés dans le document uploadé, règle distincte de la génération), `conditions_paiement`, `acompte`. `QuoteResponse` : +`import_meta: Optional[dict]`. `types.ts` : +`ImportMeta`, +`EmetteurExtrait`. `numero_document_original` pré-remplit `devis.numero_document`. `conditions_paiement` + `acompte` vont directement dans `Devis`.
-- **A — Flux import → ImportReview → QuotePreview** : après import, l'utilisateur voit `ImportReview.tsx` (nouveau composant) avant l'aperçu. Affiche : type, n°, date, client, chantier, nb lignes, total TTC, conditions de paiement. Toggle radio "Garder mon profil enregistré" (défaut) vs "Utiliser les infos extraites" (visible si `emetteur.nom` extrait). "Afficher l'aperçu" : merge côté frontend si "replace" — **zéro appel Claude**. `page.tsx` : +`importedResponse`, +`importArtisanChoice`, `handleConfirmImport()`, `handleImported` met à jour `documentType` et `documentDate` depuis `import_meta`.
-
-**Déploiement production (14 juin 2026) ✅**
-- **Audit sécurité** : aucun `.env` suivi par git, aucune clé en dur dans le code, `ANTHROPIC_API_KEY` lue exclusivement depuis l'env via pydantic-settings.
-- **`NEXT_PUBLIC_API_URL`** : déjà câblé dans `frontend/src/lib/api.ts` avec fallback `localhost:8000` — aucune modification nécessaire.
-- **Pillow** : ajouté dans `requirements.txt` (manquait malgré son usage pour les logos).
-- **Python 3.11.9 sur Render** : `backend/runtime.txt` + `backend/.python-version` (double filet).
-- **Migration modèle** : `claude-sonnet-4-20250514` → `claude-sonnet-4-6` dans `config.py` (modèle déprécié le 15/06/2026).
-- **Backend** : déployé sur **Render** (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`). Variables d'env Render : `ANTHROPIC_API_KEY`, `ALLOWED_ORIGIN`.
-- **Frontend** : déployé sur **Vercel**. Variable d'env Vercel : `NEXT_PUBLIC_API_URL`.
-
-### Étape 2 — Persistance & Monétisation — en cours
-Auth Supabase (Lot 1 ✅), Persistance profil (Lot 2 ✅), Documents/historique & Numérotation (Lots 3 & 4 ✅), Stripe (Lot 5).
-
-**Étape 2 — Lot 1 : Authentification Supabase (2 juillet 2026) ✅**
-- **Backend** : `auth.py` — dépendance FastAPI `get_current_user` : vérification JWT Supabase par JWKS asymétrique RS256/ES256, singleton `PyJWKClient` (cache 5 min, rotation de clés automatique). `config.py` : +`supabase_url: str` + propriété dérivée `supabase_jwks_url`. Routes protégées par `Depends(get_current_user)` : `/quotes/generate`, `/quotes/import`, `/pdf/export`, `/word/export`. `/health` reste public. `requirements.txt` : +`PyJWT[crypto]>=2.8.0`. CORS : `Authorization` ajouté dans `allow_headers`.
-- **Frontend** : `@supabase/ssr` + `@supabase/supabase-js` installés. `supabase-client.ts` (`createBrowserClient`), `supabase-server.ts` (`createServerClient` + gestion cookies SSR, try/catch Server Components), `middleware.ts` (refresh session + protection routes, recréation `supabaseResponse` dans `setAll`, rien entre `createServerClient` et `getUser()`), `login/page.tsx` (login + inscription + écran "vérifiez votre e-mail"), `auth/confirm/route.ts` (callback `verifyOtp` email → session cookie → redirect `/`). `page.tsx` : email affiché + bouton déconnexion. `api.ts` : header `Authorization: Bearer` via `getSession()` (lecture locale, zéro round-trip) sur tous les appels backend.
-- **Config Supabase** : 3 tables avec RLS (`entreprises`, `clients`, `documents`) + colonnes de numérotation annuelle prévues (`compteur_devis_annee`, etc.). Login obligatoire dès ce lot, confirmation e-mail activée. JWT asymétrique (ES256/RS256) — JWKS URL : `https://ojuphphxvjpvvtsbbzpq.supabase.co/auth/v1/.well-known/jwks.json`.
-
-**Étape 2 — Lot 2 : Persistance profil entreprise (2 juillet 2026) ✅**
-- **Backend** : `models/profile.py` — `ProfileEntreprise` Pydantic (11 champs + `modele_prefere`), distinct d'`ArtisanInfo` pour ne pas modifier `quote.py`. `routers/profile.py` — `GET /profile` (404 si absent) + `PUT /profile` (upsert select-then-insert/update), chaque requête filtre `user_id = current_user.user_id`. `core/supabase_client.py` — singleton `get_supabase_admin()` via `lru_cache`, client service_role. `config.py` : `supabase_service_role_key: str` requis. `main.py` : router `/profile` monté + `PUT` ajouté aux méthodes CORS. `requirements.txt` : `supabase>=2.0.0` + `pydantic-settings>=2.4.0`.
-- **Frontend** : `lib/types.ts` : +`ProfileEntreprise`. `lib/api.ts` : +`getProfile()` (retourne `null` sur 404) + `saveProfile()`. `QuoteForm.tsx` : au montage → `getProfile()` → pré-rempli champs artisan + `onModeleLoaded` callback ; 404 → bannière migration localStorage si profil local détecté. Bouton "Enregistrer le profil" (en bas de la carte Mon entreprise) → `saveProfile()` + feedback OK/erreur. LocalStorage garde son rôle de cache/fallback. `page.tsx` : +`onModeleLoaded={setModele}` sur `QuoteForm`.
-
-**Étape 2 — Lots 3 & 4 : Documents, historique & numérotation automatique (2 juillet 2026) ✅**
-- **BDD** : Fonction Postgres `get_next_numero(p_user_id, p_type)` — `UPDATE entreprises SET compteur = CASE ... RETURNING` atomique (verrou de ligne), gère la remise à zéro annuelle dans le même UPDATE via CASE. Retourne `DEV-YYYY-NNN` / `FAC-YYYY-NNN`. Compteurs séparés : `compteur_devis` + `compteur_devis_annee`, `compteur_factures` + `compteur_factures_annee`. Colonnes supplémentaires : `titre text` (nom du fichier PDF/Word) + `numero_document text` (réf. du devis saisie dans le formulaire).
-- **Backend** : `services/numero_service.py` — helper `get_next_numero()` appelle la RPC via client service_role ; normalise le retour (`str` | `list` | `dict` selon la version PostgREST). `models/document.py` — `DocumentCreate`, `DocumentSummary`, `DocumentDetail`, `StatusUpdate`, `StatusPatchResponse` (incluant `titre` et `numero_document`). `routers/documents.py` — 4 endpoints filtrés `user_id` : `POST /documents` (auto-save brouillon + upsert client par nom), `GET /documents` (historique batch-fetch noms clients), `GET /documents/{id}` (payload complet), `PATCH /documents/{id}` (transition statut ; brouillon→envoyé appelle `get_next_numero` une seule fois). `main.py` : router `/documents` monté + `PATCH` ajouté aux méthodes CORS.
-- **Frontend** : `lib/types.ts` : +`DocumentCreate`, `DocumentSummary`, `DocumentDetail`, `StatusPatchResponse` (incluant `titre` et `numero_document`). `lib/api.ts` : +`saveDocument()`, `listDocuments()`, `getDocument()`, `updateDocumentStatus()` (propagation du détail d'erreur backend dans le chip rouge). `page.tsx` : auto-save après génération et après import confirmé (`doAutoSave` passe `titre` = `buildDefaultFilename()` + `numero_document` = `devis.numero_document`), feedback discret "Brouillon enregistré ✓" (3 s), bouton "Historique" dans le header, badge statut + bouton "Marquer envoyé" dans la toolbar, réouverture d'un document depuis l'historique. `HistoriqueView.tsx` : liste des documents, titre = nom du fichier (`doc.titre`), référence = `doc.numero_document` (réf. devis, pas le séquentiel DB), badges statut colorés (brouillon/envoyé/signé/payé), clic → `getDocument()` → QuotePreview.
-
-### Étape 3 — Mobile & Vision — non commencée
-Saisie vocale (speech-to-text), vision IA (analyse plans/photos).
+- **Étape 1 (MVP)** ✅ en production (Render + Vercel) — génération IA, PDF/Word, 2 modèles, import.
+- **Étape 2 (Persistance & Monétisation)** en cours : Auth Supabase, profil, documents/historique, numérotation auto, dashboard, clients ✅ faits. **Reste : Lot 5 — Stripe** (abonnements Freemium/Pro, quotas devis/mois).
+- **Batch 11** ✅ : assurance pro obligatoire, soft delete documents, tests pytest PDF/Word (non-régression), envoi par email (Resend), expiration auto des devis.
+- **Batch 12** ✅ : sécurité du cron, CI (ruff+pytest, tsc+build), signature électronique publique (+ signature à main levée), spécificités BTP (facture d'acompte/solde, retenue de garantie, TVA réduite, autoliquidation).
+- **Batch 13** ✅ : `CLAUDE.md` allégé (historique déplacé dans `CHANGELOG.md`), numérotation devis/facture personnalisable par compte (point de départ, préfixe, padding, reset annuel).
+- **Batch 14** ✅ : notification email auto à la signature (PDF signé), numéro provisoire dès la génération, historique en onglets Devis/Facture, suppression élargie à tous les statuts, nom client éditable, logo → accueil.
+- **Étape 3 (Mobile & Vision)** — non commencée (saisie vocale, vision IA plans/photos).
 
 ---
 
@@ -107,6 +39,7 @@ et produit un document PDF + Word prêt à envoyer au client.
 | Word | python-docx (pur Python) | export .docx modifiable |
 | BDD | Supabase (Postgres managé) | 3 tables avec RLS — Lot 2 : persistance |
 | Auth | Supabase Auth | JWT asymétrique ES256/RS256 via JWKS, cookie SSR, `PyJWT[crypto]` |
+| Graphiques | recharts | Dashboard — BarChart CA/mois, PieChart statuts |
 
 ---
 
@@ -125,8 +58,15 @@ cd frontend
 npm run dev
 ```
 
-> ⚠️ Modifier un `.py` → rechargement auto uvicorn  
+> ⚠️ Modifier un `.py` → rechargement auto uvicorn (peut se figer en session longue, cf. pièges ci-dessous)
 > ⚠️ Modifier `.env` → redémarrage manuel obligatoire (Ctrl+C puis relancer)
+
+### Tests (non-régression PDF/Word)
+```bash
+cd backend
+venv\Scripts\activate
+pytest
+```
 
 ---
 
@@ -148,42 +88,82 @@ backend/app/
 ├── models/
 │   ├── quote.py         # Source de vérité Pydantic (NE PAS MODIFIER sans plan)
 │   ├── profile.py       # ProfileEntreprise (Lot 2) — distinct d'ArtisanInfo
+│                        #   + assurance_nom/contrat/couverture (Batch 11 T1)
+│                        #   + devis_numero_*/facture_numero_*/numero_reset_annuel
+│                        #     (config numérotation, Batch 13 T2 — pas les compteurs runtime)
 │                        #   LigneDevis    : lot?, poste, description, quantite, unite,
 │                        #                   prix_unitaire_ht, tva_taux, source_prix
 │                        #   ArtisanInfo   : nom, siret, adresse, code_postal, ville,
-│                        #                   telephone, email, site_web, logo_base64, iban, bic
+│                        #                   telephone, email, site_web, logo_base64, iban, bic,
+│                        #                   assurance_nom/contrat/couverture (Batch 11 T1)
 │                        #   TotauxDevis   : total_ht, total_tva, total_ttc,
 │                        #                   remise_ht=0.0, total_ht_net=0.0, net_a_payer=0.0
 │                        #   Devis         : client, artisan, chantier, lignes, totaux,
 │                        #                   mentions_legales, notes?, numero_document?,
 │                        #                   remise_type?, remise_valeur?, acompte?,
-│                        #                   modele?="moderne"
+│                        #                   retenue_garantie_taux?, type_facture?, autoliquidation,
+│                        #                   modele?="moderne", afficher_signature=True
 │                        #   QuoteRequest  : description, region, artisan_* (11 champs),
 │                        #                   client_nom, client_adresse, numero_document,
 │                        #                   remise_type, remise_valeur, acompte,
+│                        #                   retenue_garantie_taux, autoliquidation,
 │                        #                   modele?="moderne",
 │                        #                   prix_personnalises?
 │                        #   QuoteResponse : success, devis?, error?, tokens_used?,
 │                        #                   import_meta? (UNIQUEMENT renseigné par l'import)
-│   └── document.py      # DocumentCreate, DocumentSummary, DocumentDetail,
-│                        #   StatusUpdate, StatusPatchResponse (Lots 3 & 4)
+│   ├── document.py      # DocumentCreate, DocumentSummary, DocumentDetail,
+│   │                    #   StatusUpdate, StatusPatchResponse, CreateAcompteRequest
+│   │                    #   StatutDocument = Literal[...6 statuts...]
+│   │                    #   + document_source_id, date_envoi/signature/paiement/refus,
+│   │                    #   signature_nom_signataire, signature_image_base64 (Detail seul)
+│   ├── client.py        # ClientSummary, ClientDetail, ClientUpdate
+│   ├── public.py        # PublicArtisanInfo/PublicClientInfo (whitelists), PublicDevisView,
+│   │                    #   AcceptSignatureRequest, PublicActionResponse (Batch 12 T3)
+│   ├── pdf.py            # PdfRequest — devis + signature_nom_signataire/image/date (métadonnées
+│   │                    #   document, jamais dans Devis)
+│   └── dashboard.py     # DashboardStats, CaMoisPoint, TopPrestation
 ├── routers/
 │   ├── quotes.py        # POST /quotes/generate  +  POST /quotes/import
 │   ├── pdf.py           # POST /pdf/export
 │   ├── word.py          # POST /word/export
 │   ├── profile.py       # GET /profile (404 si absent) + PUT /profile (upsert) — Lot 2
+│   │                    #   PUT verrouille devis/facture_numero_debut si un numéro existe déjà
+│   │                    #     pour ce type (_numero_debut_locked, 409 sinon) — Batch 13 T2
+│   │                    #   GET /profile/numerotation-status → locked + prochain compteur brut
+│   │                    #     (devis + facture), lecture seule (Batch 13 T2)
 │   │                    #   Dépend de get_current_user + get_supabase_admin
 │   │                    #   Filtrage user_id obligatoire (client service_role bypass RLS)
-│   └── documents.py     # POST /documents (brouillon + upsert client par nom) — Lots 3 & 4
-│                        #   GET /documents (historique, batch-fetch noms clients)
-│                        #   GET /documents/{id} (devis_payload complet pour réouverture)
-│                        #   PATCH /documents/{id} (statut ; brouillon→envoyé → get_next_numero)
-│                        #   Filtrage user_id obligatoire partout
+│   ├── documents.py     # POST /documents (brouillon + upsert client par nom)
+│   │                    #   GET /documents (historique, batch-fetch noms clients)
+│   │                    #   GET /documents/{id} (devis_payload complet pour réouverture)
+│   │                    #   PATCH /documents/{id} (statut ; horodatage idempotent ;
+│   │                    #     brouillon→envoyé → get_next_numero)
+│   │                    #   POST /documents/{id}/convert (devis→facture, document_source_id ;
+│   │                    #     détecte une facture d'acompte existante → devient facture de solde)
+│   │                    #   POST /documents/{id}/duplicate (copie conforme)
+│   │                    #   POST /documents/{id}/create-acompte (facture d'acompte séparée,
+│   │                    #     devis signé requis — fonction pure _build_acompte_devis)
+│   │                    #   DELETE /documents/{id} (soft delete deleted_at, 409 si non-brouillon/refusé)
+│   │                    #   GET /documents/{id}/signature-link (génère token à la demande)
+│   │                    #   POST /documents/{id}/send (email Resend + archivage + transition)
+│   │                    #   _row_to_detail() helper commun ; _statut_transition_update() partagé
+│   │                    #   avec routers/public.py ; Filtrage user_id obligatoire partout
+│   ├── public.py        # ⚠️ AUCUNE authentification — routeur séparé par design (Batch 12 T3)
+│   │                    #   GET /public/devis/{token}, POST .../accept, POST .../refuse
+│   ├── clients.py       # GET /clients (nb docs + CA total, agrégés en Python)
+│   │                    #   GET /clients/{id} (fiche + historique) — PUT /clients/{id}
+│   │                    #   Filtrage user_id obligatoire
+│   └── dashboard.py     # GET /dashboard/stats → appelle la RPC get_dashboard_stats
+│                        #   (agrégation 100% SQL, jamais de boucle Python)
 └── services/
     ├── claude_service.py  # Orchestration API Anthropic + boucle Tool Use agentic
     │                      #   ⚠️ Injection POST-GÉNÉRATION (jamais envoyé à Claude) :
     │                      #     adresse, cp, ville, tel, email, site_web, logo, iban, bic,
-    │                      #     numero_document, remise_type, remise_valeur, acompte, modele
+    │                      #     assurance_nom/contrat/couverture, numero_document,
+    │                      #     remise_type, remise_valeur, acompte, retenue_garantie_taux,
+    │                      #     autoliquidation, modele, afficher_signature
+    │                      #   ⚠️ Tout champ artisan_* doit AUSSI être injecté dans
+    │                      #     import_service.py::_inject_artisan (2e point d'injection)
     ├── import_service.py  # Import PDF/.docx → extraction Claude → QuoteResponse + import_meta
     │                      #   PDF : bloc document natif base64 (Claude lit directement)
     │                      #   .docx : python-docx → texte plat → Claude texte
@@ -191,8 +171,16 @@ backend/app/
     │                      #   _parse_import_response : détecte stop_reason="max_tokens",
     │                      #                            logue réponse brute sur échec
     │                      #   _inject_artisan : écrase artisan extrait par profil localStorage
-    ├── numero_service.py  # get_next_numero(user_id, type_doc) — appelle RPC Postgres (Lots 3 & 4)
-│                          #   Jamais d'incrément côté Python (race condition) — toujours via RPC
+    ├── numero_service.py  # get_next_numero(user_id, type_doc) — appelle RPC Postgres (numérotation
+    │                      #     LÉGALE, atomique, formatage inclus dans la fonction SQL)
+    │                      #   Jamais d'incrément côté Python (race condition) — toujours via RPC
+    │                      #   format_numero()/compute_next_compteur() : fonctions PURES, reflètent
+    │                      #     le CASE SQL — utilisées UNIQUEMENT par preview_next_compteur()
+    │                      #     (lecture seule, aperçu UI, jamais le numéro légal) — Batch 13 T2
+    ├── dashboard_service.py  # get_dashboard_stats_raw(user_id) — appelle la RPC get_dashboard_stats
+    │                      #   Normalisation défensive du retour (même pattern que numero_service.py)
+    ├── email_service.py    # send_devis_email() — Resend, appel REST direct via httpx
+    ├── storage_service.py  # archive_document_pdf() — Storage bucket privé, best-effort
     ├── price_search.py    # Base de prix BTP 2026 + coefficients régionaux (12 régions)
     ├── pdf_service.py     # Génération PDF — fpdf2, A4
     │                      #   Modèle « moderne » : bandeau vert #14532D, Helvetica, lots #E3EDE6
@@ -200,13 +188,19 @@ backend/app/
     │                      #                        lots texte bleu acier #3B5573, filets épais
     │                      #   Logo : PIL pour aspect ratio, max 38×28 mm, décalage texte dynamique
     │                      #   Colonnes : Prestation | Description | Qté | Unité | PU HT | [TVA] | Total HT
-    │                      #   Totaux enrichis : remise / HT net / TVA / TTC / acompte / net
+    │                      #   Totaux enrichis : remise / HT net / TVA / TTC / acompte / retenue
+    │                      #     de garantie (chaînable avec l'acompte) / net à payer
+    │                      #   Mentions TVA calculées à l'affichage (jamais stockées) : art. 293 B,
+    │                      #     taux réduit 10%/5.5% (attestation), autoliquidation — mutuellement
+    │                      #     exclusives, cf. pièges
     │                      #   Signature : 2 encadrés "Bon pour accord" + "Signature client"
-    └── word_service.py    # Génération Word — python-docx
+    │                      #     — conditionnels à devis.afficher_signature (footer_h -34mm si masqué)
+    │                      #     — signature électronique (nom/image/date) passée en paramètres de
+    │                      #       fonction séparés, jamais lue depuis Devis (cf. pièges)
+    └── word_service.py    # Génération Word — python-docx, même logique que pdf_service.py
                            #   Modèle « moderne » : Calibri, fond vert #14532D en-tête
                            #   Modèle « pro »     : Georgia, anthracite, filets épais
                            #   Logo : PIL pour aspect ratio, max 4×2.5 cm
-                           #   Colonnes : idem PDF
 ```
 
 ---
@@ -218,15 +212,20 @@ frontend/src/
 ├── app/
 │   ├── page.tsx         # Chef d'orchestre : états result (Devis|null), documentType,
 │   │                    #   withTva, documentDate, modele ("moderne"|"pro")
-│   │                    #   userEmail + handleLogout (Étape 2 Lot 1)
-│   │                    #   DocTypeToggle + ModelToggle côte à côte (form screen)
-│   │                    #   onModeleLoaded={setModele} → QuoteForm (Lot 2)
+│   │                    #   userEmail + handleLogout
+│   │                    #   activeView: "form"|"historique"|"clients"|"dashboard"
+│   │                    #   STATUT_BADGE + STATUT_TRANSITIONS (non exportés — un export
+│   │                    #     nommé depuis un fichier page.tsx casse le typing Next.js)
+│   │                    #   handleChangeStatut(), handleConvertToFacture(),
+│   │                    #   handleDuplicateDocument(), handleCreateAcompte()
+│   │                    #   handleOpenFromHistory(detail: DocumentDetail) — un seul objet,
+│   │                    #     pas de params positionnels (cf. pièges)
+│   │                    #   signatureInfo state → alimente PdfExportButton/WordExportButton
 │   │                    #   layout max-w-5xl, palette verte #14532D
-│   ├── login/
-│   │   └── page.tsx     # Login + inscription + écran "vérifiez votre e-mail" (Lot 1)
-│   ├── auth/
-│   │   └── confirm/
-│   │       └── route.ts # Callback confirmation e-mail : verifyOtp → session → redirect / (Lot 1)
+│   ├── login/page.tsx     # Login + inscription + écran "vérifiez votre e-mail"
+│   ├── auth/confirm/route.ts # Callback confirmation e-mail : verifyOtp → session → redirect /
+│   ├── devis/[token]/page.tsx # Page publique de signature (non authentifiée) — lecture,
+│   │                    #   accepter/refuser, composant SignaturePad (canvas + Pointer Events)
 │   └── globals.css      # Palette verte :
 │                        #   body #FAFAF7, .btn-primary #14532D→#0F3D21, radius 14px
 │                        #   .card radius 16px, ombre discrète, bordure rgba(20,83,45,.1)
@@ -238,12 +237,19 @@ frontend/src/
 │   │                    #   ② Région (select)
 │   │                    #   ③ Carte « Mon entreprise » accordéon — badge « Enregistré »
 │   │                    #     nom, SIRET, adresse, CP, ville, tel, email, site_web, logo, IBAN, BIC
-│   │                    #     Bouton « Enregistrer le profil » → PUT /profile (Lot 2)
+│   │                    #     Bouton « Enregistrer le profil » → PUT /profile
+│   │                    #   ③bis « Numérotation » accordéon (Batch 13 T2) — état local
+│   │                    #     NumerotationConfig (distinct de form: QuoteRequest), point de
+│   │                    #     départ/préfixe/padding/inclure année par type + reset annuel
+│   │                    #     partagé ; aperçu en direct via GET /profile/numerotation-status
+│   │                    #     + reformatage local (formatNumeroPreview, miroir JS du backend) ;
+│   │                    #     sauvegardé par le même bouton/PUT que le reste du profil
 │   │                    #   ④ Bloc client (nom client, adresse chantier)
 │   │                    #   ⑤ « Mes prix habituels » accordéon
-│   │                    #   ⑥ « Remise & acompte » accordéon
-│   │                    #   ⑦ « Numéro de document » accordéon
-│   │                    #   modele reçu en prop + onModeleLoaded callback (Lot 2)
+│   │                    #   ⑥ « Remise & acompte » accordéon (+ retenue de garantie %)
+│   │                    #   ⑦ « Paramètres du document » accordéon (numéro, validité,
+│   │                    #     conditions paiement, afficher_signature, autoliquidation)
+│   │                    #   modele reçu en prop + onModeleLoaded callback
 │   │                    #   Au montage : getProfile() → pré-rempli ; 404 → bannière migration LS
 │   │                    #   localStorage "artisan_profile" = cache/backup (plus source de vérité)
 │   │                    #   ⚠️ localStorage dans useEffect uniquement (pas useState)
@@ -255,44 +261,67 @@ frontend/src/
 │   │                    #   Bascule modèle Moderne ↔ Pro en direct → onUpdate → PDF/Word
 │   │                    #   TOTAL TTC / HT éditable : ratio = new/old appliqué à chaque PU HT
 │   │                    #   Groupement LOT : headers verts (#E3EDE6/#14532D), sous-totaux
-│   │                    #   Totaux enrichis (T9) : remise / HT net / TVA / TTC / acompte / net
+│   │                    #     — nom de lot éditable (EditableText), renameLot() propage
+│   │                    #       à toutes les lignes du groupe (pas seulement la ligne cliquée)
+│   │                    #   Totaux enrichis : remise / HT net / TVA / TTC / acompte / net
 │   │                    #   validite_jours : input inline sous la date (en-tête droit)
 │   │                    #   conditions_paiement : input texte bas de page
 │   │                    #   mentions_legales : éditables inline (EditableText) + add/remove
 │   │                    #                     + bouton "Régénérer" (retour mentions Claude)
 │   │                    #   Ajout/suppression lignes : bouton + par lot ou global, poubelle hover
 │   │                    #   quantite null = "au réel" : bouton × pour vider, clic pour définir
+│   │                    #   afficher_signature : toggle checkbox bas de page (défaut coché)
+│   │                    #   Gestion des lots : bouton "+ Nouveau lot" (nom unique auto-incrémenté),
+│   │                    #     suppression de lot (lignes → sans lot, jamais supprimées),
+│   │                    #     réassignation de ligne via <select> (lotOptions)
+│   │                    #   ⚠️ retenue_garantie_taux / autoliquidation NE sont PAS édités ici
+│   │                    #     (réglés une fois dans QuoteForm, survivent aux édits via _buildDevis
+│   │                    #     qui part de ...devis) — cf. pièges
 │   │                    #   onUpdate → propage devis mis à jour à page.tsx (pour PDF/Word)
 │   │
 │   ├── ImportButton.tsx      # Bouton d'import — lit localStorage artisan_profile, FormData
-│   ├── ImportReview.tsx      # Écran de validation post-import
-│   │                         #   Affiche : type doc, n°, date, client, chantier, lignes, TTC, conditions
-│   │                         #   Toggle radio "Garder mon profil" (défaut) / "Utiliser l'émetteur extrait"
-│   │                         #   (visible seulement si import_meta.emetteur.nom non null)
-│   │                         #   Bouton "Afficher l'aperçu" → handleConfirmImport (zéro appel Claude)
-│   ├── PdfExportButton.tsx   # Bouton export PDF
-│   ├── WordExportButton.tsx  # Bouton export Word (.docx)
-│   └── HistoriqueView.tsx   # Liste des documents (Lots 3 & 4)
-│                             #   Badges statut : brouillon/envoyé/signé/payé
-│                             #   Clic → getDocument(id) → onOpen → QuotePreview
+│   ├── ImportReview.tsx      # Écran de validation post-import (résumé + toggle artisan)
+│   ├── PdfExportButton.tsx   # Bouton export PDF — prend un prop signature? (SignatureExportOptions)
+│   ├── WordExportButton.tsx  # Bouton export Word (.docx) — idem
+│   ├── HistoriqueView.tsx   # Liste des documents — onOpen: (detail: DocumentDetail) => void
+│   │                         #   Onglets Devis/Facture (Batch 14) — filtrage client-side de
+│   │                         #     GET /documents, aucun paramètre backend
+│   │                         #   Badges statut : 6 statuts. Icônes : Dupliquer, Convertir en facture,
+│   │                         #     Supprimer (tout statut depuis Batch 14, confirm renforcé si numero)
+│   │                         #   Clic → getDocument(id) → onOpen → QuotePreview
+│   ├── ClientsView.tsx      # Liste triable (nom/CA/nb documents), fiche client éditable,
+│   │                         #   historique cliquable — onOpenDocument même callback que HistoriqueView
+│   └── DashboardView.tsx    # KPI (StatTile) + recharts — BarChart CA/mois + PieChart statuts
+│                             #   (labels directs sur chaque part, cf. skill dataviz)
 │
 └── lib/
-    ├── api.ts           # generateQuote, importQuote, exportToPdf, exportToWord
-    │                    #   getProfile() → ProfileEntreprise | null (Lot 2)
-    │                    #   saveProfile(p) → PUT /profile (Lot 2)
-    │                    #   saveDocument(), listDocuments(), getDocument(id) (Lots 3 & 4)
-    │                    #   updateDocumentStatus(id, statut) → PATCH (assigne numéro si envoyé)
-    │                    #   authHeader() : getSession() → Authorization: Bearer (Lot 1)
-    ├── supabase-client.ts  # createBrowserClient — composants "use client" (Lot 1)
-    ├── supabase-server.ts  # createServerClient + cookies SSR — Server Components (Lot 1)
+    ├── api.ts           # generateQuote, importQuote, exportToPdf, exportToWord (avec signature?)
+    │                    #   getProfile()/saveProfile() — profil entreprise (+ config numérotation)
+    │                    #   getNumerotationStatus() — verrouillage + prochain compteur brut (T2)
+    │                    #   saveDocument(), listDocuments(), getDocument(id), updateDocumentStatus()
+    │                    #   convertToFacture(id), duplicateDocument(id), createAcompte(id, pct)
+    │                    #   listClients(), getClient(id), updateClient(id, upd)
+    │                    #   getDashboardStats()
+    │                    #   getSignatureLink(id), getPublicDevis(token), acceptPublicDevis(),
+    │                    #     refusePublicDevis() — ⚠️ pas de authHeader() sur ces 3 dernières
+    │                    #     (routes publiques volontairement non authentifiées)
+    │                    #   authHeader() : getSession() → Authorization: Bearer
+    ├── supabase-client.ts  # createBrowserClient — composants "use client"
+    ├── supabase-server.ts  # createServerClient + cookies SSR — Server Components
     └── types.ts         # Miroir EXACT des modèles Pydantic — toujours synchroniser
-                         #   ProfileEntreprise : 11 champs + modele_prefere (Lot 2)
-                         #   Devis        : + modele?: string | null
-                         #   QuoteRequest : + modele?: string
+                         #   ProfileEntreprise : 11 champs + modele_prefere
+                         #   Devis : + modele?, afficher_signature?, type_facture?,
+                         #           retenue_garantie_taux?, autoliquidation?
+                         #   QuoteRequest : mêmes champs en miroir
                          #   QuoteResponse: + import_meta?: ImportMeta
-                         #   ImportMeta   : document_type, numero_document_original,
-                         #                  date_document_original, emetteur, conditions_paiement, acompte
-                         #   EmetteurExtrait : nom, siret, adresse, cp, ville, tel, email, site_web, iban, bic
+                         #   StatutDocument : 6 statuts
+                         #   DocumentSummary/DocumentDetail : + document_source_id,
+                         #     date_envoi/signature/paiement/refus, signature_nom_signataire,
+                         #     signature_image_base64 (Detail seul)
+                         #   ClientSummary, ClientDetail, ClientUpdate
+                         #   DashboardStats, CaMoisPoint, TopPrestation
+                         #   PublicArtisanInfo, PublicClientInfo, PublicDevisView,
+                         #     SignatureLinkResponse
 ```
 
 ---
@@ -301,113 +330,17 @@ frontend/src/
 
 ```
 [QuoteForm]
-  ↓ QuoteRequest (description + artisan_* + numero_document + remise + acompte + modele)
+  ↓ QuoteRequest (description + artisan_* + numero_document + remise + acompte + modele + ...)
 [Backend /quotes/generate]
   ↓ Prompt Claude (description + région + prix artisan) — SANS infos sensibles
 [Claude API — Tool Use]
   ↓ JSON brut (lignes, totaux, mentions)
 [claude_service.py — injection post-Claude]
-  ↓ Devis complet (+ adresse, logo, iban, bic, numero_document, remise, acompte, modele)
+  ↓ Devis complet (+ adresse, logo, iban, bic, numero_document, remise, acompte, modele, ...)
 [QuotePreview] ← résultat affiché, éditable inline
   ↓ bascule modèle Moderne/Pro → onUpdate → page.tsx setResult
 [PDF/Word export] ← envoie le Devis complet (avec devis.modele) au backend
 ```
-
----
-
-## Fonctionnalités implémentées ✅
-
-| # | Fonctionnalité | Fichiers clés |
-|---|---|---|
-| 1 | Génération devis par texte libre → JSON Claude | `claude_service.py`, `prompts.py` |
-| 2 | Tool Use : recherche prix du marché manquants | `price_search.py`, `claude_service.py` |
-| 3 | Mes prix habituels (badge "Votre prix") | `QuoteForm.tsx` |
-| 4 | Édition inline : Poste, Desc, Lot, Qté, Unité, PU HT, TVA, Total HT | `QuotePreview.tsx` |
-| 5 | Toggle Devis / Facture | `page.tsx` |
-| 6 | Toggle Avec / Sans TVA (+ mention art. 293 B CGI) | `page.tsx`, `pdf_service.py` |
-| 7 | Sélecteur de date | `page.tsx` |
-| 8 | Export PDF professionnel (fpdf2) | `pdf_service.py` |
-| 9 | Export Word (.docx) | `word_service.py` |
-| 10 | IBAN / BIC artisan dans PDF et Word | `quote.py`, `claude_service.py`, `pdf_service.py`, `word_service.py` |
-| 11 | Prompt IA détaillé (DTU, normes, 5–10 lignes) | `prompts.py` |
-| 12 | Layout large max-w-5xl | `page.tsx` |
-| 13 | Infos entreprise complètes + persistance localStorage | `QuoteForm.tsx` |
-| 14 | Logo artisan (aspect ratio préservé, PDF max 38×28 mm, Word max 4×2.5 cm) | `pdf_service.py`, `word_service.py` |
-| 15 | Groupement par LOT (PDF + Word + aperçu) | tous les services |
-| 16 | Pagination PDF multi-pages propre | `pdf_service.py` |
-| 17 | Validation saisie artisan (SIRET, IBAN, BIC, email, CP) | `QuoteForm.tsx` |
-| 18 | Numéro de document (DEV-…, FAC-…) | `quote.py`, `claude_service.py`, PDF, Word |
-| 19 | Dropdown custom 9 groupes prestations BTP (fermeture clic extérieur) | `QuoteForm.tsx` |
-| 20 | Remise (% / montant fixe) + acompte + net à payer | tous les fichiers |
-| 21 | Palette verte premium #14532D + Inter | `globals.css`, `layout.tsx` |
-| 22 | QuoteForm redesign : accordéons, badge Enregistré, dropdown custom | `QuoteForm.tsx` |
-| 23 | Champ `modele` ("moderne"\|"pro") dans Devis + QuoteRequest | `quote.py`, `types.ts`, `claude_service.py` |
-| 24 | 2 modèles PDF : moderne (vert, Helvetica) et pro (anthracite, Times) | `pdf_service.py` |
-| 25 | 2 modèles Word : moderne (Calibri) et pro (Georgia) | `word_service.py` |
-| 26 | Colonne Unité séparée (PDF, Word, aperçu) | `pdf_service.py`, `word_service.py`, `QuotePreview.tsx` |
-| 27 | TTC éditable dans aperçu (ratio sur tous les PU HT) | `QuotePreview.tsx` |
-| 28 | Bascule modèle Moderne ↔ Pro en direct + sélecteur page | `QuotePreview.tsx`, `page.tsx` |
-| 29 | CP → Ville autocomplete (geo.api.gouv.fr) artisan + client | `QuoteForm.tsx` |
-| 30 | CP + Ville client dans QuotePreview | `QuotePreview.tsx` |
-| 31 | Prix identiques : diversification `price_search.py` + prompt + log dupliqués | `price_search.py`, `prompts.py`, `claude_service.py` |
-| 32 | `validite_jours` + `conditions_paiement` dans modèles + form + PDF/Word | `quote.py`, `QuoteForm.tsx`, `pdf_service.py`, `word_service.py` |
-| 33 | Mentions légales différenciées devis/facture + art. 293 B CGI | `pdf_service.py`, `word_service.py` |
-| 34 | TTC arrondi — dernière ligne absorbe l'écart | `QuotePreview.tsx` |
-| 35 | PDF pagination par sections (LOT = bloc insécable) | `pdf_service.py` |
-| 36 | Footer insécable (mentions + RIB + signature) | `pdf_service.py` |
-| 37 | Numéro de document libre (sans auto-incrément) | `QuoteForm.tsx` |
-| 38 | Validité libre (vide → pas de mention) | `QuoteForm.tsx`, `quote.py`, `pdf_service.py`, `word_service.py` |
-| 39 | Chantier éditable inline dans QuotePreview | `QuotePreview.tsx` |
-| 40 | Bug sans TVA corrigé (masquage mentions TVA) | `pdf_service.py`, `word_service.py` |
-| 41 | CORS restreint + rate limiting 10 req/min | `main.py`, `config.py`, `quotes.py` |
-| 42 | CP + Ville client dans PDF et Word (via prompt + injection) | `prompts.py`, `claude_service.py`, `pdf_service.py`, `word_service.py` |
-| 43 | Fix texte invisible sur lignes prestation (reset text_color après bandeaux blancs) | `pdf_service.py` |
-| 44 | Consolidation pdf_service : `MUTED_TEXT`, `_set_body()`, reset systématique | `pdf_service.py` |
-| 45 | Infos entreprise complètes dans l'aperçu (adresse, CP/ville, tél, email, site, IBAN, BIC) | `QuotePreview.tsx` |
-| 46 | Fix définitif texte invisible PDF : `_set_body()` / `_set_white()` avant en-tête, reset LOT + sous-total, couleurs par modèle | `pdf_service.py` |
-| 47 | Fix définitif CP+Ville client : injection inconditionnelle post-Claude, normalisation `""` → None | `claude_service.py` |
-| 48 | Fix récurrent texte invisible PDF : double garde `_set_body()` + `pdf.set_font(FONT,"",8)` IMMÉDIATEMENT avant la boucle cellules (règle B) | `pdf_service.py` |
-| 49 | Audit sécurité pré-déploiement : aucun `.env` suivi, aucune clé en dur, CORS + rate limiting vérifiés | — |
-| 50 | Pillow ajouté aux dépendances (manquait pour les logos PDF/Word) | `requirements.txt` |
-| 51 | Python 3.11.9 fixé sur Render : `runtime.txt` + `.python-version` | `backend/` |
-| 52 | Migration modèle `claude-sonnet-4-20250514` → `claude-sonnet-4-6` (ancien modèle déprécié) | `config.py` |
-| 53 | Déploiement production : backend Render + frontend Vercel | infrastructure |
-| 54 | `validite_jours` visible et éditable dans l'en-tête QuotePreview (input inline) | `QuotePreview.tsx` |
-| 55 | `conditions_paiement` + `mentions_legales` éditables dans QuotePreview (+ bouton Régénérer) | `QuotePreview.tsx` |
-| 56 | Ajout/suppression de lignes dans QuotePreview (par lot ou global, min 1 ligne) | `QuotePreview.tsx` |
-| 57 | `quantite` Optional null = "au réel" (×1 dans calculs, "au réel" dans PDF/Word/aperçu) | `quote.py`, `types.ts`, `pdf_service.py`, `word_service.py`, `QuotePreview.tsx` |
-| 58 | `numero_document` éditable inline dans l'en-tête QuotePreview (même pattern que `validite_jours`, propagé via onUpdate) | `QuotePreview.tsx` |
-| 59 | Nom de fichier personnalisable avant téléchargement PDF/Word (défaut `Devis/Facture_<n°>_<client>`, recalcul auto, extension ajoutée par chaque bouton) | `page.tsx`, `PdfExportButton.tsx`, `WordExportButton.tsx`, `api.ts` |
-| 60 | Fix import gros PDF : `MAX_OUTPUT_TOKENS=8000`, `_parse_import_response` dédié (détection troncature, log brut), prompt renforcé (regroupement sous-puces, JSON pur). Validé facture SCM 6 pages | `import_service.py`, `prompts.py` |
-| 61 | Extraction enrichie à l'import : `document_type`, `numero_document_original`, `date_document_original`, `emetteur` complet (IBAN/BIC inclus), `conditions_paiement`, `acompte`. `import_meta` dans `QuoteResponse`. `numero_document_original` pré-remplit `devis.numero_document` | `import_service.py`, `prompts.py`, `quote.py`, `types.ts` |
-| 62 | Flux import → `ImportReview` → `QuotePreview` (zéro re-call Claude). Composant `ImportReview.tsx` : résumé extrait + toggle artisan "garder profil" (défaut) / "utiliser émetteur extrait". Merge émetteur côté frontend si "replace". `handleImported` met à jour `documentType` + `documentDate` depuis `import_meta` | `ImportReview.tsx`, `page.tsx` |
-| 63 | Auth backend : `get_current_user` FastAPI dependency — vérification JWT Supabase par JWKS (RS256/ES256), singleton `PyJWKClient`. Routes `/quotes/*`, `/pdf/export`, `/word/export` protégées. `supabase_url` + `supabase_jwks_url` dans `config.py`. CORS : `Authorization` dans `allow_headers` | `auth.py`, `config.py`, `quotes.py`, `pdf.py`, `word.py`, `main.py` |
-| 64 | Auth frontend : middleware SSR (refresh session + protection routes), `supabase-client.ts` / `supabase-server.ts`, callback `verifyOtp` e-mail, `login/page.tsx` (login + signup + "check email") | `middleware.ts`, `supabase-client.ts`, `supabase-server.ts`, `auth/confirm/route.ts`, `login/page.tsx` |
-| 65 | Header `Authorization: Bearer` sur tous les appels backend via `authHeader()` (`getSession()` local, zéro round-trip). Email utilisateur + bouton déconnexion dans le header | `api.ts`, `page.tsx` |
-| 66 | Client Supabase service_role `get_supabase_admin()` singleton (Lot 2) — bypass RLS, filtrage `user_id` obligatoire sur chaque requête | `supabase_client.py`, `config.py` |
-| 67 | `GET /profile` + `PUT /profile` protégés — upsert profil entreprise (11 champs + `modele_prefere`), filtrage `user_id = current_user.user_id` | `routers/profile.py`, `models/profile.py` |
-| 68 | Chargement profil au montage de `QuoteForm` : backend → pré-rempli champs artisan + pré-positionne le sélecteur de modèle via `onModeleLoaded`. Fallback localStorage silencieux si erreur réseau | `QuoteForm.tsx`, `api.ts`, `page.tsx` |
-| 69 | Bouton « Enregistrer le profil » dans la carte Mon entreprise → `saveProfile()` → feedback OK/erreur. Bannière migration si profil localStorage détecté et base vide | `QuoteForm.tsx` |
-| 70 | Fonction Postgres `get_next_numero(user_id, type)` — UPDATE atomique (verrou ligne), reset annuel dans le même CASE, retourne `DEV-YYYY-NNN` / `FAC-YYYY-NNN` | Supabase SQL Editor |
-| 71 | `services/numero_service.py` — helper Python appelle la RPC `get_next_numero` via client service_role. Jamais d'incrément côté Python | `numero_service.py` |
-| 72 | `POST /documents` — auto-save brouillon + upsert client (clé : user_id + nom). Retourne `DocumentDetail` | `routers/documents.py`, `models/document.py` |
-| 73 | `GET /documents` — historique trié récent→ancien, batch-fetch noms clients | `routers/documents.py` |
-| 74 | `GET /documents/{id}` — payload `devis_payload` complet pour réouverture dans QuotePreview | `routers/documents.py` |
-| 75 | `PATCH /documents/{id}` — mise à jour statut ; transition brouillon→envoyé appelle `get_next_numero` une seule fois et assigne le numéro définitif | `routers/documents.py`, `numero_service.py` |
-| 76 | `DocumentCreate`, `DocumentSummary`, `DocumentDetail`, `StatusPatchResponse` dans types.ts (miroir Pydantic) | `types.ts`, `models/document.py` |
-| 77 | `saveDocument()`, `listDocuments()`, `getDocument()`, `updateDocumentStatus()` dans api.ts | `api.ts` |
-| 78 | Auto-save post-génération et post-import (`doAutoSave`) + feedback discret « Brouillon enregistré ✓ » (3 s) + badge statut dans toolbar + bouton « Marquer envoyé » → assigne numéro définitif + met à jour `numero_document` dans QuotePreview | `page.tsx` |
-| 79 | `HistoriqueView.tsx` — liste des documents (badges statut colorés, TTC, date, client). Clic → `getDocument()` → réouverture dans QuotePreview. Bouton « Historique » dans le header | `HistoriqueView.tsx`, `page.tsx` |
-| 80 | Fix bug 500 `PATCH /documents/{id}` : contrainte `documents_statut_check` corrigée en SQL (valeurs accentuées `envoyé/signé/payé` + `brouillon`) ; normalisation défensive du retour RPC dans `numero_service.py` (list/dict → str) ; détail d'erreur propagé au frontend dans `updateDocumentStatus()` | `numero_service.py`, `routers/documents.py`, `api.ts` |
-| 81 | Colonnes `titre` (nom du fichier) + `numero_document` (réf. devis) dans la table `documents`. `doAutoSave` passe `titre = buildDefaultFilename()` + `numero_document = devis.numero_document`. `HistoriqueView` affiche le titre comme libellé principal et la réf. devis en sous-titre (pas le séquentiel légal `DEV-YYYY-NNN`) | `routers/documents.py`, `models/document.py`, `types.ts`, `page.tsx`, `HistoriqueView.tsx` |
-
----
-
-## Ce qui reste à faire — Étape 2+
-
-| Priorité | Tâche | Détail |
-|---|---|---|
-| Haute | **Lot 5 — Stripe** | Abonnements Freemium/Pro, quotas devis/mois. |
 
 ---
 
@@ -420,13 +353,14 @@ frontend/src/
 | **Logo Word** | `_logo_dimensions_cm()` avec PIL, borné à 4×2.5 cm. `add_picture(width=Cm(w), height=Cm(h))` pour forcer les deux dimensions sans déformation. |
 | **Logo frontend** | Data URL complet (`data:image/…;base64,…`) dans le state React. Conversion base64 pur dans `doGenerate()`. |
 | **modele** | Injecté post-génération dans `claude_service.py` exactement comme `remise_type`, jamais envoyé à Claude. `pdf_service` et `word_service` lisent `devis.modele` pour choisir la palette/police. |
-| **Infos artisan → Claude (génération)** | Adresse artisan, logo, IBAN, BIC, artisan_code_postal/ville, numero_document, remise, acompte, modele ne passent **jamais** dans le prompt Claude de génération. Injection dans `claude_service.py` après génération. Client nom/adresse sont envoyés à Claude (message user) pour le JSON client. Client code_postal/ville sont injectés POST-génération de façon INCONDITIONNELLE. |
-| **IBAN/BIC à l'import** | La règle "infos sensibles jamais par Claude" s'applique à la **génération** uniquement. Pour l'**import**, l'IBAN et le BIC figurent déjà dans le document uploadé par l'utilisateur et sont renvoyés à son propre frontend → extraction normale dans `import_meta.emetteur`. `_inject_artisan` (qui ne les envoie pas à Claude) continue de s'appliquer sur `devis.artisan` côté génération — les deux règles coexistent sans conflit. |
-| **import_meta** | Champ `Optional[dict]` dans `QuoteResponse`. **Uniquement renseigné par `import_service.py`**, jamais par `claude_service.py` (génération laisse la valeur à `None`). Contient : `document_type`, `numero_document_original`, `date_document_original`, `emetteur` (émetteur extrait complet), `conditions_paiement`, `acompte`. Le frontend lit ces valeurs dans `handleImported` pour pré-remplir `documentType`, `documentDate` et proposer le toggle artisan dans `ImportReview`. |
+| **afficher_signature** | `bool = True` par défaut sur `Devis` et `QuoteRequest`, même pattern d'injection post-génération que `modele` (inconditionnelle, jamais envoyée à Claude). Contrôle l'encadré "Bon pour accord"/"Signature client" **et** la mention légale associée (les deux sont liés : pas de mention sans encadré). `pdf_service.py` retire 34 mm du calcul `footer_h` quand masqué — ne pas oublier ce terme si la zone de signature est un jour redimensionnée. |
+| **Infos artisan → Claude (génération)** | Adresse artisan, logo, IBAN, BIC, assurance, numero_document, remise, acompte, retenue_garantie_taux, autoliquidation, modele ne passent **jamais** dans le prompt Claude de génération. Injection dans `claude_service.py` après génération. `QuoteRequest.client_code_postal`/`client_ville` existent dans `quote.py` mais ne sont lus nulle part ni remplis par aucun formulaire — champ mort, à nettoyer ou réactiver un jour. `client_email` suit bien le pattern injection post-génération inconditionnelle, comme IBAN/BIC/assurance. |
+| **IBAN/BIC à l'import** | La règle "infos sensibles jamais par Claude" s'applique à la **génération** uniquement. Pour l'**import**, l'IBAN et le BIC figurent déjà dans le document uploadé et sont renvoyés à son propre frontend → extraction normale dans `import_meta.emetteur`. `_inject_artisan` (qui ne les envoie pas à Claude) continue de s'appliquer sur `devis.artisan` côté génération — les deux règles coexistent sans conflit. |
+| **import_meta** | Champ `Optional[dict]` dans `QuoteResponse`. **Uniquement renseigné par `import_service.py`**, jamais par `claude_service.py`. Contient : `document_type`, `numero_document_original`, `date_document_original`, `emetteur`, `conditions_paiement`, `acompte`. Le frontend lit ces valeurs dans `handleImported`. |
 | **localStorage + SSR** | `useState` lazy initializer ne doit **pas** accéder à `localStorage` → erreur d'hydratation Next.js. Utiliser `useEffect(() => { … }, [])`. |
 | **PDF Chrome** | Fix : `application/octet-stream` dans `api.ts`. |
 | **Pagination PDF** | `auto_page_break=False` pendant le tableau. Stratégie : calculer `lot_total_h` (bandeau + lignes + sous-total) AVANT de dessiner. Si ça tient sur la page courante → dessin direct. Si ça tient sur une page fraîche → `add_page()` + header. Si lot > page entière (`big_lot`) → sauts par ligne avec `sub_margin` pour coller la dernière ligne au sous-total. Footer (mentions + RIB + signature) : estimation de hauteur globale, `add_page()` si insuffisant. |
-| **validite_jours** | `Optional[int] = None` dans Pydantic + TypeScript. Vide → aucune mention de validité dans PDF/Word. L'injection post-Claude dans `claude_service.py` respecte `is not None`. |
+| **validite_jours** | `Optional[int] = None` dans Pydantic + TypeScript. Vide → aucune mention de validité dans PDF/Word. |
 | **CORS** | `allowed_origin` dans `Settings` (défaut `http://localhost:3000`). Override via `ALLOWED_ORIGIN` env var. Wildcard `*` uniquement si la valeur est `"*"`. |
 | **Rate limiting** | In-memory dict par IP dans `quotes.py`. 10 requêtes / 60 s. Nettoyage de la fenêtre glissante à chaque appel. Pas de dépendance externe. |
 | **Groupement LOT** | `lot: Optional[str]` sur `LigneDevis`. Order-preserving (dict Python / Map JS). Rétrocompatible : `lot=None` → rendu comme avant. |
@@ -434,14 +368,39 @@ frontend/src/
 | **TTC éditable** | `ratio = new_ttc / old_ttc` appliqué à chaque `prix_unitaire_ht`. `computeTotaux` recalcule tout. La remise fixe n'est pas rescalée (comportement voulu). |
 | **Colonne Unité** | Séparée de Qté depuis la refonte. PDF with_tva : [34,54,12,13,22,14,31]. Word with_tva : [2.8,5.5,1.0,1.2,2.1,1.5,2.9] cm. |
 | **Supabase service_role + user_id** | Client service_role dans `supabase_client.py` bypass toute la RLS. En contrepartie, CHAQUE requête SQL DOIT appliquer `.eq("user_id", current_user.user_id)` manuellement. Ne jamais oublier ce filtre dans un nouveau routeur. |
-| **ProfileEntreprise ≠ ArtisanInfo** | `ProfileEntreprise` (Lot 2, `models/profile.py`) est distinct d'`ArtisanInfo` (`quote.py`) pour ne pas modifier `quote.py`. Le frontend mappe l'un vers l'autre dans `QuoteForm.tsx`. Toute modification du profil passe par `ProfileEntreprise`, pas par `ArtisanInfo`. |
-| **Source de vérité profil** | Backend Supabase = source de vérité. `localStorage["artisan_profile"]` = cache/backup. Au montage de `QuoteForm` : `getProfile()` est toujours appelé en premier. Fallback localStorage uniquement sur erreur réseau/auth. |
-| **Numérotation atomique via RPC Postgres** | `get_next_numero(user_id, type)` fait un seul `UPDATE ... SET compteur = CASE WHEN annee != annee_courante THEN 1 ELSE compteur+1 END RETURNING`. Verrou de ligne PostgreSQL = pas de race condition. Jamais d'incrément côté Python. Le numéro est attribué uniquement à la transition brouillon→envoyé (légalité : séquence continue sans trou). |
-| **`devis_payload` JSONB + colonnes indexées** | Le `Devis` complet est stocké en JSONB dans `documents.devis_payload`. Les colonnes `type_doc`, `numero`, `total_ttc`, `statut`, `date_document`, `client_id` sont des colonnes séparées pour la liste (évite de parser le JSONB). La liste (`GET /documents`) batch-fetche les noms clients en une 2e requête sur `clients`. |
-| **Statuts document** | `brouillon` (défaut, auto-save post-génération) → `envoyé` (assigne numéro définitif via RPC) → `signé` → `payé`. La transition brouillon→envoyé est la seule qui déclenche la numérotation. Les transitions suivantes sont des mises à jour de statut simples. |
-| **Contrainte `documents_statut_check`** | La table `documents` a un CHECK constraint sur `statut`. Il doit lister les valeurs avec accent : `CHECK (statut IN ('brouillon', 'envoyé', 'signé', 'payé'))`. Si la contrainte est créée sans accents (erreur passée), les PATCH `statut='envoyé'` retournent 500 avec `23514`. Fix : `ALTER TABLE documents DROP CONSTRAINT documents_statut_check; ALTER TABLE documents ADD CONSTRAINT documents_statut_check CHECK (statut IN ('brouillon', 'envoyé', 'signé', 'payé'));` |
-| **`titre` vs `numero` dans `documents`** | `documents.numero` = numéro séquentiel légal attribué à la transition brouillon→envoyé (`DEV-2026-009`). `documents.titre` = nom du fichier PDF/Word construit au moment de l'auto-save (`Devis_DEVIS-001_Martin`). `documents.numero_document` = référence saisie dans le formulaire ou auto-générée par l'IA (`DEVIS-001`). L'historique affiche `titre` + `numero_document`, pas `numero`. |
-| **Texte invisible PDF — bug récurrent** | `fpdf2` : `set_text_color` est un **état global persistant**. Le blanc des bandeaux (`_draw_table_header`, bandeau LOT, `_tot_row_accent`) saigne sur les lignes suivantes si non réinitialisé immédiatement. **3 règles à NE JAMAIS CASSER** lors de toute modification de `pdf_service.py` : (A) `_set_body()` existe et reset text_color + draw_color + line_width ; (B) `_set_body()` + `pdf.set_font(FONT,"",8)` IMMÉDIATEMENT avant la boucle de cellules de chaque ligne prestation (deux appels : en début de loop iter et juste après le rect LIGHT_GRAY) ; (C) `_set_body()` après CHAQUE élément à texte blanc (header, LOT, TTC). |
+| **ProfileEntreprise ≠ ArtisanInfo** | `ProfileEntreprise` (`models/profile.py`) est distinct d'`ArtisanInfo` (`quote.py`) pour ne pas modifier `quote.py`. Le frontend mappe l'un vers l'autre dans `QuoteForm.tsx`. |
+| **Source de vérité profil** | Backend Supabase = source de vérité. `localStorage["artisan_profile"]` = cache/backup uniquement, utilisé sur erreur réseau/auth. |
+| **Numérotation atomique via RPC Postgres** | `get_next_numero(user_id, type)` fait un seul `UPDATE ... SET compteur = CASE WHEN annee != annee_courante THEN 1 ELSE compteur+1 END RETURNING`. Verrou de ligne PostgreSQL = pas de race condition. Jamais d'incrément côté Python. Le numéro est attribué uniquement à la transition brouillon→envoyé. |
+| **`devis_payload` JSONB + colonnes indexées** | Le `Devis` complet est stocké en JSONB dans `documents.devis_payload`. Les colonnes `type_doc`, `numero`, `total_ttc`, `statut`, `date_document`, `client_id` sont des colonnes séparées pour la liste (évite de parser le JSONB). |
+| **Statuts document** | `brouillon` (défaut) → `envoyé` (assigne numéro définitif via RPC) → `signé` → `payé`. La transition brouillon→envoyé est la seule qui déclenche la numérotation. |
+| **Contrainte `documents_statut_check`** | Le CHECK doit lister les valeurs avec accent : `CHECK (statut IN ('brouillon', 'envoyé', 'signé', 'payé', 'refusé', 'expiré'))`. Sans accent → PATCH renvoie 500 (`23514`). |
+| **`titre` vs `numero` dans `documents`** | `documents.numero` = numéro séquentiel légal (`DEV-2026-009`). `documents.titre` = nom du fichier PDF/Word (`Devis_DEVIS-001_Martin`). `documents.numero_document` = référence saisie dans le formulaire ou générée par l'IA (`DEVIS-001`). L'historique affiche `titre` + `numero_document`, pas `numero`. |
+| **Texte invisible PDF — bug récurrent** | `fpdf2` : `set_text_color` est un **état global persistant** qui peut "saigner" (rester blanc) sur les lignes suivantes si non réinitialisé après un bandeau blanc. Couvert par `backend/tests/test_pdf_service.py` (échoue si une règle est cassée) — **s'y référer avant toute modification de `pdf_service.py`** plutôt que de re-détailler les règles ici. Le helper central est `_set_body()`. |
+| **Piège champ booléen Pydantic + état React** | Un champ Pydantic `bool = True` combiné à un état React qui pourrait valoir `undefined` est dangereux : `JSON.stringify` **supprime silencieusement** toute clé à `undefined`, et le backend applique alors son défaut — un `False` voulu par l'utilisateur disparaît sans erreur visible. Toujours initialiser l'état React avec `?? <défaut>` (jamais laisser `undefined` possible) pour tout futur champ booléen éditable. |
+| **Dates de transition non rattrapables** | `date_envoi`/`date_signature`/`date_paiement`/`date_refus` ne sont renseignées qu'au moment RÉEL de la transition (jamais de backfill). `NULL` = "jamais atteint ce statut" — une donnée en soi. |
+| **`document_source_id` — filiation devis→facture** | Colonne `uuid REFERENCES documents(id) ON DELETE SET NULL`. `NULL` pour tout document créé normalement. `ON DELETE SET NULL` (pas `CASCADE`) : la filiation est une métadonnée de traçabilité, pas une dépendance structurelle. |
+| **Export nommé depuis `app/page.tsx`** | Next.js 14 (App Router) génère un type strict pour chaque `page.tsx` qui n'autorise que les exports connus. Exporter une constante arbitraire casse `tsc --noEmit`. Fix : ne jamais `export` une constante utilitaire dans un `page.tsx`. |
+| **Deux points d'injection pour tout champ `artisan_*`** | `QuoteRequest.artisan_*` est injecté dans `devis.artisan` à **deux** endroits : `claude_service.py` (génération) **et** `import_service.py::_inject_artisan` (import). Un nouveau champ `artisan_xxx` ajouté seulement dans `claude_service.py` fonctionnera en génération mais restera invisible après un import. Toujours dupliquer l'injection dans les deux fichiers. |
+| **`allow_methods` CORS à tenir à jour** | `main.py` liste explicitement les verbes HTTP autorisés. Chaque nouveau verbe utilisé par un routeur doit y être ajouté, sinon le navigateur bloque en préflight CORS (`Failed to fetch`, pas de detail HTTP). |
+| **Soft delete = jamais de `DELETE` SQL** | `documents.deleted_at timestamptz`, nullable. Toute suppression passe par `UPDATE deleted_at = now()`. Chaque requête qui liste des documents DOIT explicitement filtrer `deleted_at IS NULL` — l'oubli est silencieux. Depuis le Batch 14, `DELETE /documents/{id}` accepte **n'importe quel statut** (plus de restriction brouillon/refusé) — jugé sûr car le numéro légal reste protégé par la contrainte `UNIQUE (user_id, type_doc, numero)` (Batch 13 T2) même sur une ligne "supprimée", et la ligne elle-même n'est jamais physiquement retirée. |
+| **Numéro provisoire ≠ numéro légal** | Batch 14 : `numero_document` (champ libre, affiché dans le PDF/Word) est pré-rempli à la génération avec un numéro **prévisionnel** calculé côté frontend (`page.tsx::computeProvisionalNumero`, réutilise `getNumerotationStatus()` + `formatNumeroPreview()` de Batch 13 T2) si vide. `documents.numero` (le numéro légal, séquentiel, gapless) continue à n'être attribué **qu'à l'envoi**, via la RPC atomique — jamais touché par ce mécanisme. Le provisoire peut différer du numéro réellement attribué si d'autres documents sont envoyés entre-temps ; c'est un compromis assumé pour ne jamais réserver de numéro légal sur un brouillon abandonné. Ne jamais faire dépendre un calcul de CA/audit de `numero_document` — seul `documents.numero` fait foi. |
+| **Notification email = best-effort, ne bloque jamais l'action principale déjà actée** | `_notifier_artisan_signature()` (`routers/public.py`, Batch 14) envoie le PDF signé à l'artisan APRÈS que le statut soit déjà mis à jour en base — toute erreur (email absent, Resend en échec) est loguée et avalée, jamais renvoyée au client qui vient de signer. Pattern à réutiliser pour toute future notification déclenchée par une action déjà validée : ne jamais faire échouer la réponse HTTP pour un envoi secondaire. (Différent de `POST /documents/{id}/send`, où l'email EST l'action principale et DOIT bloquer si Resend échoue — cf. piège dédié plus haut.) |
+| **`with_tva` non persisté** | Le toggle "Avec/Sans TVA" n'est jamais stocké en base — paramètre d'affichage passé à chaque export. `POST /documents/{id}/send` le déduit par heuristique : `devis.totaux.total_tva > 0`. Fiable en pratique, imparfait en théorie. Si ça devient un problème, ajouter une colonne `with_tva` dédiée. |
+| **Ordre des opérations dans `/documents/{id}/send`** | L'email est envoyé **avant** toute écriture en base. Si Resend échoue, rien n'est écrit, aucun numéro gaspillé. L'archivage Storage est **après** et **best-effort** (erreur juste loguée). Ne jamais inverser cet ordre. |
+| **RPC de mutation appelée depuis un GitHub Action → `service_role`, jamais `anon`** | Un workflow qui ne fait que LIRE → clé anon suffit (`supabase-keepalive.yml`). Un workflow qui ÉCRIT/MODIFIE → secret service_role dédié, toujours jamais anon (`expire-devis.yml`), même si la fonction Postgres est `SECURITY DEFINER` (bypass la RLS mais ne remplace pas un contrôle d'accès sur qui peut l'appeler — mécanismes complémentaires, pas interchangeables). Erreur commise puis corrigée en Batch 12 T1 : ne pas la répéter. |
+| **Route publique non authentifiée → routeur dédié, modèle Pydantic dédié** | Toute future route publique (sans `Depends(get_current_user)`) doit vivre dans un fichier **séparé** des routeurs authentifiés (pattern `routers/public.py`) — rend l'absence d'auth visuellement évidente. Ne **jamais** renvoyer un modèle interne (`Devis`, `devis_payload` brut) sur une route publique — construire un modèle Pydantic dédié en **liste blanche explicite** (`PublicArtisanInfo`, etc.), jamais une liste d'exclusion sur le modèle complet. |
+| **Nouvelle route publique → penser à `middleware.ts`** | `middleware.ts` protège par défaut **toutes** les routes sauf celles explicitement exemptées (`/login`, `/auth/*`, `/devis/*`). Toute future page publique doit être ajoutée à `isPublicPath`, sinon redirection silencieuse vers `/login`. |
+| **`extra = "ignore"` sur `Settings`** | `.env` est partagé entre plusieurs consommateurs (backend, workflows, parfois frontend). Sans `extra = "ignore"` dans `Settings.Config`, toute variable ajoutée pour UN SEUL consommateur fait planter **tout démarrage du backend**. Un champ *requis* toujours absent lève toujours une erreur claire — seules les variables *en trop* sont ignorées. |
+| **Signature image = métadonnée document, jamais champ `Devis`** | `signature_image_base64`/`signature_nom_signataire` vivent sur `documents`, pas sur `Devis`. `generate_quote_pdf()`/`generate_quote_docx()` les reçoivent en paramètres de fonction séparés, jamais en les lisant depuis l'objet `Devis`. Toute nouvelle donnée liée à la signature doit suivre le même chemin : colonne `documents` → paramètre de fonction PDF/Word, jamais `quote.py`. |
+| **Limite taille image signature (2,8 Mo)** | `routers/public.py::accept_devis` refuse (HTTP 400) toute image décodée dépassant 2,8 Mo. Pas de compression côté serveur ni client — si la limite s'avère trop stricte, ajouter une compression côté client plutôt que remonter la limite brute. |
+| **`handleOpenFromHistory(detail: DocumentDetail)`** | Remplace l'ancienne signature à 4 paramètres positionnels par un seul objet `DocumentDetail`. Tout nouveau champ ajouté à `DocumentDetail` devient automatiquement disponible partout où ce callback est utilisé — préférer étendre `DocumentDetail` plutôt que réintroduire des paramètres positionnels séparés. |
+| **`uvicorn --reload` peut se figer silencieusement** | Après de nombreux cycles d'édition dans une session longue, `WatchFiles` peut cesser de détecter les changements `.py` sans erreur visible — le process répond `200` sur `/health` mais sert du code obsolète. **Vérification rapide** : `GET /openapi.json`, chercher le nouveau chemin/champ — absent = pas rechargé. Fix : tuer le process et relancer à froid. Toujours vérifier ce point avant de chercher un bug applicatif dans un changement "sans effet". |
+| **Signature image / type_facture / retenue_garantie_taux / autoliquidation → jamais éditables dans `QuotePreview`** | Contrairement à `acompte` (édition live + recalcul des totaux), ces champs se règlent une fois (formulaire ou action dédiée) et ne sont plus retouchés dans l'aperçu — ils survivent aux éditions car `_buildDevis()` part de `...devis`. Cohérent avec le traitement des champs assurance (Batch 11 T1). |
+| **`documents.total_ttc` peut diverger de `devis_payload.totaux.total_ttc`** | Cas de la facture de solde (T4-2) : `documents.total_ttc` (utilisé par le dashboard pour le CA) = reste à payer, alors que `devis_payload.totaux.total_ttc` reste le total légal complet affiché dans le PDF — sinon le montant de l'acompte serait compté deux fois dans le CA. Seule divergence intentionnelle connue entre ces deux valeurs à ce jour. |
+| **Mentions TVA (293 B / taux réduit / autoliquidation) sont mutuellement exclusives** | Calculées à l'affichage dans `pdf_service.py`/`word_service.py` à partir de `with_tva`, `devis.autoliquidation` et `devis.lignes[].tva_taux` — jamais stockées, jamais éditables. `autoliquidation=True` supprime automatiquement les deux autres. Ne jamais les faire cohabiter : ce sont des régimes fiscaux différents. |
+| **Pause Supabase (plan gratuit)** | Un projet Supabase gratuit se met en pause après ~1 semaine d'inactivité. **Symptôme : `ERR_NAME_NOT_RESOLVED`** sur `*.supabase.co` (pas une erreur HTTP — facile à confondre avec un problème réseau local). Mitigé par `.github/workflows/supabase-keepalive.yml` (ping tous les 3 jours). |
+| **Numérotation : formatage/atomicité toujours en SQL, jamais en Python** | `get_next_numero` (Postgres) reste la SEULE source de vérité pour un numéro légal — formatage (préfixe/année/padding) et incrément dans la même fonction, même `UPDATE...RETURNING`. `numero_service.py::format_numero()`/`compute_next_compteur()` sont des fonctions Python **pures qui dupliquent volontairement cette logique**, mais UNIQUEMENT pour `preview_next_compteur()` (aperçu UI en lecture seule, jamais d'écriture) — un écart entre les deux ne peut jamais produire un doublon de numéro, juste un aperçu temporairement imprécis. Si la règle de reset ou le format changent un jour, mettre à jour les DEUX (SQL et Python) — ce n'est pas automatique. |
+| **`devis_numero_debut`/`facture_numero_debut` verrouillés après le premier numéro attribué** | `PUT /profile` (`routers/profile.py::_numero_debut_locked`) vérifie côté backend — pas seulement dans le formulaire — si un document de ce type a déjà un `numero` non `NULL` avant d'accepter un changement de point de départ (409 sinon). Les 3 autres champs par type (préfixe, année, padding) restent librement modifiables. Le reset annuel (`numero_reset_annuel`, partagé devis/facture) n'est jamais verrouillé, seul le point de départ l'est. |
 
 ---
 
@@ -455,6 +414,7 @@ frontend/src/
 - **Les infos sensibles ne passent jamais par Claude** — injectées dans `claude_service.py` après génération. Le champ `modele` suit la même règle.
 - **Nouvelles dépendances Python** → ajouter dans `requirements.txt` ET installer dans le venv
 - **Variables d'env en production** → ne jamais les coder en dur ; les définir dans le dashboard Render (backend) ou Vercel (frontend)
-- **`SUPABASE_SERVICE_ROLE_KEY`** → jamais côté frontend, jamais dans git — Lot 2 uniquement (appels admin Supabase depuis le backend)
+- **`SUPABASE_SERVICE_ROLE_KEY`** → jamais côté frontend, jamais dans git (appels admin Supabase depuis le backend)
+- **`RESEND_API_KEY`** → jamais côté frontend, jamais dans git (`backend/.env` en local, dashboard Render en production). Sans elle, `POST /documents/{id}/send` répond une erreur claire plutôt que de planter au démarrage.
 - **`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`** (`sb_publishable_*`) → sûre côté frontend, protégée par RLS
-- **`get_current_user`** → dépendance FastAPI dans tous les routers qui touchent les données utilisateur. Ne jamais bypasser. `/health` seul endpoint public autorisé.
+- **`get_current_user`** → dépendance FastAPI dans tous les routers qui touchent les données utilisateur. Ne jamais bypasser. `/health` seul endpoint public authentifié-exempté côté API (les routes `routers/public.py` sont, elles, publiques par design).

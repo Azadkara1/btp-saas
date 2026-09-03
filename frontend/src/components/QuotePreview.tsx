@@ -65,8 +65,8 @@ function computeTotaux(
 
 // ── Cellule texte éditable ──────────────────────────────────────
 function EditableText({
-  value, onChange, className = "", multiline = false, allowEmpty = false,
-}: { value: string; onChange: (v: string) => void; className?: string; multiline?: boolean; allowEmpty?: boolean }) {
+  value, onChange, className = "", multiline = false, allowEmpty = false, placeholder,
+}: { value: string; onChange: (v: string) => void; className?: string; multiline?: boolean; allowEmpty?: boolean; placeholder?: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const commit = () => {
@@ -88,7 +88,7 @@ function EditableText({
   return (
     <button type="button" onClick={() => { setDraft(value); setEditing(true); }} title="Modifier"
       className={`group inline-flex items-start gap-1 hover:text-blue-600 rounded px-1 py-0.5 hover:bg-blue-50 transition-colors text-left w-full ${className}`}>
-      <span className="flex-1">{value}</span>
+      <span className="flex-1">{value || <span className="text-gray-400 font-normal">{placeholder || "—"}</span>}</span>
       <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-50 flex-shrink-0 mt-0.5" />
     </button>
   );
@@ -118,13 +118,14 @@ function EditableNumber({
 // ── Ligne de prestation ─────────────────────────────────────────
 // T3 : onDelete + canDelete ; T4 : quantite null → "au réel"
 function LigneRow({
-  ligne, withTva, onUpdate, onDelete, canDelete,
+  ligne, withTva, onUpdate, onDelete, canDelete, lotOptions,
 }: {
   ligne: LigneDevis;
   withTva: boolean;
   onUpdate: (field: string, value: number | string | null) => void;
   onDelete: () => void;
   canDelete: boolean;
+  lotOptions: string[];
 }) {
   const qty = ligne.quantite ?? 1;
   const montantHt = round2(qty * ligne.prix_unitaire_ht);
@@ -154,8 +155,13 @@ function LigneRow({
           className="text-xs text-gray-500 mt-0.5" />
         <div className="flex items-center gap-2 mt-1 flex-wrap">
           <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>
-          <EditableText value={ligne.lot || "— lot"} onChange={v => onUpdate("lot", v === "— lot" ? "" : v)}
-            className="text-xs text-slate-500 bg-slate-100 rounded-full px-2 py-0.5" />
+          {/* Phase 3 : réassignation du lot via select (évite les typos qui créeraient un lot fantôme) */}
+          <select value={ligne.lot ?? ""} onChange={e => onUpdate("lot", e.target.value || null)}
+            title="Déplacer cette ligne vers un autre lot"
+            className="text-xs text-slate-500 bg-slate-100 rounded-full px-2 py-0.5 border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400">
+            <option value="">Sans lot</option>
+            {lotOptions.map(lot => <option key={lot} value={lot}>{lot}</option>)}
+          </select>
           {/* T3 : bouton suppression par ligne */}
           {canDelete && (
             <button type="button" onClick={onDelete} title="Supprimer cette ligne"
@@ -240,6 +246,9 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
   const [acompte, setAcompte]           = useState<number>(devis.acompte || 0);
   const [currentModele, setCurrentModele] = useState<string>(devis.modele || "moderne");
   const [chantierDesc, setChantierDesc] = useState<string>(devis.chantier.description || "");
+  const [clientNom, setClientNom] = useState<string>(devis.client.nom || "");
+  const [clientAdresse, setClientAdresse] = useState<string>(devis.client.adresse || "");
+  const [clientEmail, setClientEmail] = useState<string>(devis.client.email || "");
 
   // T1+T2 : état local pour les champs éditables post-génération
   const [localNumeroDoc, setLocalNumeroDoc]                 = useState<string>(devis.numero_document || "");
@@ -247,6 +256,7 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
   const [localConditionsPaiement, setLocalConditionsPaiement] = useState<string>(devis.conditions_paiement || "");
   const [localMentions, setLocalMentions]                   = useState<string[]>([...devis.mentions_legales]);
   const [mentionsEditedByUser, setMentionsEditedByUser]     = useState(false);
+  const [localAfficherSignature, setLocalAfficherSignature] = useState<boolean>(devis.afficher_signature ?? true);
   // Conserve les mentions Claude originales pour le bouton "Régénérer"
   const originalMentionsRef = useRef<string[]>([...devis.mentions_legales]);
 
@@ -269,6 +279,11 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
     });
     return Array.from(map.values());
   }, [lignes]);
+  // Phase 3 : noms de lots existants, pour le select de réassignation par ligne
+  const lotOptions = useMemo(
+    () => Array.from(new Set(lignes.map(l => l.lot).filter((l): l is string => !!l))),
+    [lignes]
+  );
 
   // _buildDevis inclut désormais tous les champs locaux (T1+T2)
   const _buildDevis = (l: LigneDevis[], rt: string, rv: number, ac: number, mod?: string) => ({
@@ -284,6 +299,7 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
     validite_jours:       localValiditeJours,
     conditions_paiement:  localConditionsPaiement || null,
     mentions_legales:     localMentions,
+    afficher_signature:   localAfficherSignature,
   });
 
   // T4 : field accepte null pour quantite
@@ -314,6 +330,43 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
   const removeLigne = (index: number) => {
     if (lignes.length <= 1) return;
     const updated = lignes.filter((_, i) => i !== index);
+    setLignes(updated);
+    onUpdate(_buildDevis(updated, remiseType, remiseValeur, acompte));
+  };
+
+  // Renomme un lot : propage le nouveau nom sur toutes les lignes du groupe
+  const renameLot = (oldLot: string, newLot: string) => {
+    const trimmed = newLot.trim();
+    if (!trimmed || trimmed === oldLot) return;
+    const updated = lignes.map(l => l.lot === oldLot ? { ...l, lot: trimmed } : l);
+    setLignes(updated);
+    onUpdate(_buildDevis(updated, remiseType, remiseValeur, acompte));
+  };
+
+  // Phase 3 : crée un nouveau lot vide (1 ligne) avec un nom unique
+  const addNewLot = () => {
+    const existing = new Set(lignes.map(l => l.lot).filter(Boolean));
+    let name = "Nouveau lot";
+    let i = 1;
+    while (existing.has(name)) { i += 1; name = `Nouveau lot ${i}`; }
+    const newLigne: LigneDevis = {
+      lot: name,
+      poste: "Nouvelle prestation",
+      description: "À compléter",
+      quantite: 1,
+      unite: "forfait",
+      prix_unitaire_ht: 0,
+      tva_taux: 10,
+      source_prix: "estimation",
+    };
+    const updated = [...lignes, newLigne];
+    setLignes(updated);
+    onUpdate(_buildDevis(updated, remiseType, remiseValeur, acompte));
+  };
+
+  // Phase 3 : supprime un lot — les lignes repassent en "sans lot", jamais supprimées
+  const deleteLot = (lot: string) => {
+    const updated = lignes.map(l => l.lot === lot ? { ...l, lot: null } : l);
     setLignes(updated);
     onUpdate(_buildDevis(updated, remiseType, remiseValeur, acompte));
   };
@@ -379,6 +432,11 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
     onUpdate({ ..._buildDevis(lignes, remiseType, remiseValeur, acompte), mentions_legales: orig });
   };
 
+  const handleAfficherSignature = (val: boolean) => {
+    setLocalAfficherSignature(val);
+    onUpdate({ ..._buildDevis(lignes, remiseType, remiseValeur, acompte), afficher_signature: val });
+  };
+
   // Valeur TTC / HT courante affichée dans le bandeau principal
   const currentTtcDisplay = withTva ? totaux.total_ttc : (totaux.total_ht_net ?? totaux.total_ht);
 
@@ -435,6 +493,12 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
           {devis.artisan.site_web  && <p className="text-xs" style={{ color: "#7C857F" }}>{devis.artisan.site_web}</p>}
           {devis.artisan.iban      && <p className="text-xs" style={{ color: "#7C857F" }}>IBAN : {devis.artisan.iban}</p>}
           {devis.artisan.bic       && <p className="text-xs" style={{ color: "#7C857F" }}>BIC : {devis.artisan.bic}</p>}
+          {devis.artisan.assurance_nom &&
+            <p className="text-xs" style={{ color: "#7C857F" }}>Assurance : {devis.artisan.assurance_nom}</p>}
+          {devis.artisan.assurance_contrat &&
+            <p className="text-xs" style={{ color: "#7C857F" }}>N° de contrat : {devis.artisan.assurance_contrat}</p>}
+          {devis.artisan.assurance_couverture &&
+            <p className="text-xs" style={{ color: "#7C857F" }}>Couverture : {devis.artisan.assurance_couverture}</p>}
         </div>
         <div className="text-right space-y-2">
           <div className="text-2xl font-black uppercase tracking-tight" style={{ color: "#14532D" }}>
@@ -485,16 +549,52 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
 
       {/* Client + Chantier */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {devis.client.nom && (
+        {(devis.client.nom || devis.client.adresse || devis.client.email || devis.client.code_postal || devis.client.ville) && (
           <div className="rounded-xl p-4" style={{ backgroundColor: "#F0F7F3", borderLeft: "4px solid #14532D" }}>
             <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: "#14532D" }}>Client</div>
-            <div className="font-semibold" style={{ color: "#18211C" }}>{devis.client.nom}</div>
-            {devis.client.adresse && <div className="text-sm" style={{ color: "#5A635D" }}>{devis.client.adresse}</div>}
+            <EditableText
+              value={clientNom}
+              onChange={v => {
+                setClientNom(v);
+                onUpdate({
+                  ..._buildDevis(lignes, remiseType, remiseValeur, acompte),
+                  client: { ...devis.client, nom: v || null },
+                });
+              }}
+              placeholder="Nom du client"
+              className="font-semibold"
+            />
+            <EditableText
+              value={clientAdresse}
+              onChange={v => {
+                setClientAdresse(v);
+                onUpdate({
+                  ..._buildDevis(lignes, remiseType, remiseValeur, acompte),
+                  client: { ...devis.client, adresse: v || null },
+                });
+              }}
+              placeholder="Adresse du client"
+              className="text-sm text-gray-600"
+              allowEmpty
+            />
             {(devis.client.code_postal || devis.client.ville) && (
               <div className="text-sm" style={{ color: "#5A635D" }}>
                 {[devis.client.code_postal, devis.client.ville].filter(Boolean).join(" ")}
               </div>
             )}
+            <EditableText
+              value={clientEmail}
+              onChange={v => {
+                setClientEmail(v);
+                onUpdate({
+                  ..._buildDevis(lignes, remiseType, remiseValeur, acompte),
+                  client: { ...devis.client, email: v || null },
+                });
+              }}
+              placeholder="Email du client"
+              className="text-xs text-gray-500"
+              allowEmpty
+            />
           </div>
         )}
         <div className="rounded-xl p-4 bg-amber-50" style={{ borderLeft: "4px solid #F59E0B" }}>
@@ -514,10 +614,20 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
         </div>
       </div>
 
-      <p className="text-xs flex items-center gap-1.5" style={{ color: "#7C857F" }}>
-        <Pencil className="w-3 h-3" />
-        Cliquez sur n'importe quelle valeur pour la modifier · × sur la Qté = "au réel" · <Trash2 className="w-3 h-3 inline" /> = supprimer la ligne
-      </p>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs flex items-center gap-1.5" style={{ color: "#7C857F" }}>
+          <Pencil className="w-3 h-3" />
+          Cliquez sur n'importe quelle valeur pour la modifier · × sur la Qté = "au réel" · <Trash2 className="w-3 h-3 inline" /> = supprimer la ligne
+        </p>
+        {/* Phase 3 : créer un nouveau lot */}
+        <button type="button" onClick={addNewLot}
+          className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-colors shrink-0"
+          style={{ color: "#14532D", border: "1px dashed rgba(20,83,45,0.35)" }}
+          onMouseOver={e => (e.currentTarget.style.backgroundColor = "#E3EDE6")}
+          onMouseOut={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+          <Plus className="w-3 h-3" /> Nouveau lot
+        </button>
+      </div>
 
       {/* Tableau */}
       <div className="overflow-x-auto">
@@ -540,7 +650,17 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
                     <tr style={{ backgroundColor: "#E3EDE6" }}>
                       <td colSpan={colCount} className="py-2 px-3 font-semibold text-sm"
                         style={{ color: "#14532D" }}>
-                        {lot}
+                        <div className="flex items-center justify-between gap-2">
+                          <EditableText value={lot} onChange={v => renameLot(lot, v)}
+                            className="font-semibold" />
+                          {/* Phase 3 : supprimer le lot — les lignes repassent "sans lot" */}
+                          <button type="button" onClick={() => deleteLot(lot)}
+                            title="Supprimer ce lot (les lignes restent, sans lot)"
+                            className="text-xs shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                            style={{ color: "#B45309" }}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -548,7 +668,8 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
                     <LigneRow key={index} ligne={ligne} withTva={withTva}
                       onUpdate={(field, value) => updateLigne(index, field, value)}
                       onDelete={() => removeLigne(index)}
-                      canDelete={lignes.length > 1} />
+                      canDelete={lignes.length > 1}
+                      lotOptions={lotOptions} />
                   ))}
                   {/* T3 : bouton ajouter dans ce lot */}
                   <tr>
@@ -582,7 +703,8 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
                 <LigneRow key={i} ligne={ligne} withTva={withTva}
                   onUpdate={(field, value) => updateLigne(i, field, value)}
                   onDelete={() => removeLigne(i)}
-                  canDelete={lignes.length > 1} />
+                  canDelete={lignes.length > 1}
+                  lotOptions={lotOptions} />
               ))
             )}
           </tbody>
@@ -757,6 +879,17 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
             </li>
           )}
         </ul>
+      </div>
+
+      {/* Toggle affichage encadré signature */}
+      <div className="border-t pt-3" style={{ borderColor: "rgba(20,83,45,0.1)" }}>
+        <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: "#5A635D" }}>
+          <input type="checkbox"
+            checked={localAfficherSignature}
+            onChange={e => handleAfficherSignature(e.target.checked)}
+            className="w-4 h-4 rounded" style={{ accentColor: "#14532D" }} />
+          Afficher l'encadré "Bon pour accord" / signature client dans le document
+        </label>
       </div>
     </div>
   );

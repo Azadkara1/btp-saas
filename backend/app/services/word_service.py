@@ -27,6 +27,19 @@ def _fmt_date(iso_date: Optional[str]) -> str:
     return date_class.today().strftime("%d/%m/%Y")
 
 
+def _fmt_signature_date(iso_datetime: Optional[str]) -> Optional[str]:
+    """Formate un horodatage de signature (colonne `date_signature`, ISO avec fuseau)
+    en 'JJ/MM/AAAA à HH:MM'. None si absent — ne jamais inventer une date."""
+    if not iso_datetime:
+        return None
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(iso_datetime.replace("Z", "+00:00"))
+        return dt.strftime("%d/%m/%Y à %H:%M")
+    except Exception:
+        return iso_datetime  # repli : brut plutôt que rien
+
+
 def _logo_dimensions_cm(logo_data: bytes) -> tuple[float, float]:
     """Calcule la largeur et hauteur du logo (cm) en respectant l'aspect ratio."""
     W_MAX, H_MAX = 4.0, 2.5
@@ -48,8 +61,17 @@ def generate_quote_docx(
     document_type: str = "devis",
     with_tva: bool = True,
     document_date: Optional[str] = None,
+    signature_nom_signataire: Optional[str] = None,
+    signature_image_base64: Optional[str] = None,
+    signature_date: Optional[str] = None,
 ) -> bytes:
-    """Génère le .docx et retourne les bytes."""
+    """Génère le .docx et retourne les bytes.
+
+    signature_nom_signataire / signature_image_base64 / signature_date :
+    capturés lors de la signature électronique (Batch 12 T3), métadonnée du
+    document — pas du devis lui-même (jamais dans Devis/quote.py).
+    """
+    logging.info("[WORD] afficher_signature=%s document_type=%s signe=%s", devis.afficher_signature, document_type, bool(signature_nom_signataire))
     try:
         from docx import Document
         from docx.shared import Pt, RGBColor, Cm
@@ -64,7 +86,12 @@ def generate_quote_docx(
     is_pro   = (modele == "pro")
     BODY_FONT = "Georgia" if is_pro else "Calibri"
 
-    doc_label = "FACTURE" if document_type == "facture" else "DEVIS"
+    if devis.type_facture == "acompte":
+        doc_label = "FACTURE D'ACOMPTE"
+    elif devis.type_facture == "solde":
+        doc_label = "FACTURE DE SOLDE"
+    else:
+        doc_label = "FACTURE" if document_type == "facture" else "DEVIS"
     doc_date  = _fmt_date(document_date)
 
     def _fmt_money(amount: float) -> str:
@@ -445,6 +472,7 @@ def generate_quote_docx(
     totaux      = devis.totaux
     has_remise  = (totaux.remise_ht or 0) > 0
     has_acompte = (devis.acompte or 0) > 0
+    has_retenue = (devis.retenue_garantie_taux or 0) > 0
 
     def _add_total_row(label: str, value: str, bold: bool = False,
                        bg_hex: str = "F8F9FA", txt_color: RGBColor = None):
@@ -528,9 +556,15 @@ def generate_quote_docx(
             _add_total_row("Total HT net", _fmt_money(ht_net))
         _add_total_row("Total TVA", _fmt_money(totaux.total_tva))
         _add_total_accent("TOTAL TTC", _fmt_money(totaux.total_ttc))
+        net = totaux.total_ttc
         if has_acompte:
             _add_total_row("Acompte verse", "- " + _fmt_money(devis.acompte or 0))
             net = totaux.net_a_payer if totaux.net_a_payer else max(0, totaux.total_ttc - (devis.acompte or 0))
+            _add_total_net("NET A PAYER", _fmt_money(net))
+        if has_retenue:
+            retenue_montant = round(totaux.total_ttc * (devis.retenue_garantie_taux or 0) / 100, 2)
+            _add_total_row(f"Retenue de garantie ({devis.retenue_garantie_taux:g}%)", "- " + _fmt_money(retenue_montant))
+            net = max(0, net - retenue_montant)
             _add_total_net("NET A PAYER", _fmt_money(net))
     else:
         if has_remise:
@@ -540,10 +574,16 @@ def generate_quote_docx(
             _add_total_accent("TOTAL HT NET", _fmt_money(ht_net))
         else:
             _add_total_accent("TOTAL HT", _fmt_money(totaux.total_ht))
+        ht_base = totaux.total_ht_net if totaux.total_ht_net else totaux.total_ht
+        net = ht_base
         if has_acompte:
-            ht_base = totaux.total_ht_net if totaux.total_ht_net else totaux.total_ht
             _add_total_row("Acompte verse", "- " + _fmt_money(devis.acompte or 0))
             net = totaux.net_a_payer if totaux.net_a_payer else max(0, ht_base - (devis.acompte or 0))
+            _add_total_net("NET A PAYER", _fmt_money(net))
+        if has_retenue:
+            retenue_montant = round(ht_base * (devis.retenue_garantie_taux or 0) / 100, 2)
+            _add_total_row(f"Retenue de garantie ({devis.retenue_garantie_taux:g}%)", "- " + _fmt_money(retenue_montant))
+            net = max(0, net - retenue_montant)
             _add_total_net("NET A PAYER", _fmt_money(net))
 
     sep4 = doc.add_paragraph()
@@ -563,13 +603,15 @@ def generate_quote_docx(
                 final_mentions_w.append(f"Devis valable {validite_w} jours a compter de la date d'emission")
         elif not with_tva and "tva" in ml:
             pass  # Masquer toutes les mentions TVA taux en mode sans TVA
+        elif not devis.afficher_signature and "accord" in ml:
+            pass  # Masquer toute mention "Bon pour accord" si l'encadré signature est désactivé
         else:
             final_mentions_w.append(m)
 
     if document_type == "devis":
         if validite_w and not any("valable" in m.lower() for m in final_mentions_w):
             final_mentions_w.insert(0, f"Devis valable {validite_w} jours a compter de la date d'emission")
-        if not any("accord" in m.lower() for m in final_mentions_w):
+        if devis.afficher_signature and not any("accord" in m.lower() for m in final_mentions_w):
             final_mentions_w.append("Signature du client precedee de la mention 'Bon pour accord'")
     else:
         if not any("retard" in m.lower() or "penalite" in m.lower() for m in final_mentions_w):
@@ -581,6 +623,28 @@ def generate_quote_docx(
     if devis.conditions_paiement:
         final_mentions_w.append(f"Conditions de paiement : {devis.conditions_paiement}")
 
+    # T4-4 : TVA a taux reduit (10%/5.5%) specifique travaux — mention obligatoire
+    # de l'attestation client. Non pertinent en autoliquidation.
+    if with_tva and not devis.autoliquidation:
+        taux_presents_w = {round(l.tva_taux, 2) for l in devis.lignes}
+        if 10.0 in taux_presents_w:
+            final_mentions_w.append(
+                "TVA a 10% appliquee sur attestation du client certifiant l'eligibilite des travaux "
+                "(art. 279-0 bis du CGI - logement acheve depuis plus de 2 ans)"
+            )
+        if 5.5 in taux_presents_w:
+            final_mentions_w.append(
+                "TVA a 5,5% appliquee sur attestation du client certifiant l'eligibilite des travaux "
+                "(art. 278-0 bis A du CGI - amelioration de la qualite energetique)"
+            )
+
+    # T4-5 : Autoliquidation (sous-traitance BTP) — mention obligatoire,
+    # remplace toute mention de franchise en base (art. 293 B).
+    if devis.autoliquidation:
+        final_mentions_w.append(
+            "Autoliquidation de la TVA - Article 283-2 nonies du CGI - TVA due par le preneur"
+        )
+
     for mention in final_mentions_w:
         p = doc.add_paragraph(f"• {mention}")
         _zero_para_spacing(p)
@@ -588,7 +652,7 @@ def generate_quote_docx(
         p.runs[0].font.name = BODY_FONT
         p.runs[0].font.color.rgb = RGBColor(90, 99, 93)
 
-    if not with_tva:
+    if not with_tva and not devis.autoliquidation:
         p = doc.add_paragraph("• TVA non applicable, art. 293 B du CGI")
         _zero_para_spacing(p)
         p.runs[0].font.size = Pt(8)
@@ -613,49 +677,98 @@ def generate_quote_docx(
             p3.runs[0].font.size = Pt(9)
             p3.runs[0].font.name = BODY_FONT
 
+    # ── ASSURANCE PROFESSIONNELLE / DÉCENNALE (mention obligatoire BTP) ──
+    if devis.artisan.assurance_nom or devis.artisan.assurance_contrat or devis.artisan.assurance_couverture:
+        sep7 = doc.add_paragraph("─" * 90)
+        _zero_para_spacing(sep7)
+        pa = doc.add_paragraph()
+        _zero_para_spacing(pa)
+        _run(pa, "Assurance professionnelle", size=10, color=COL_ACCENT, bold=True)
+        if devis.artisan.assurance_nom:
+            pa1 = doc.add_paragraph(f"Assureur : {devis.artisan.assurance_nom}")
+            _zero_para_spacing(pa1)
+            pa1.runs[0].font.size = Pt(9)
+            pa1.runs[0].font.name = BODY_FONT
+        if devis.artisan.assurance_contrat:
+            pa2 = doc.add_paragraph(f"N\xb0 de contrat : {devis.artisan.assurance_contrat}")
+            _zero_para_spacing(pa2)
+            pa2.runs[0].font.size = Pt(9)
+            pa2.runs[0].font.name = BODY_FONT
+        if devis.artisan.assurance_couverture:
+            pa3 = doc.add_paragraph(f"Couverture geographique : {devis.artisan.assurance_couverture}")
+            _zero_para_spacing(pa3)
+            pa3.runs[0].font.size = Pt(9)
+            pa3.runs[0].font.name = BODY_FONT
+
     # ── ZONE DE SIGNATURE ────────────────────────────────────────────
-    sep_sig = doc.add_paragraph()
-    _zero_para_spacing(sep_sig)
+    if devis.afficher_signature:
+        sep_sig = doc.add_paragraph()
+        _zero_para_spacing(sep_sig)
 
-    sig_tbl = doc.add_table(rows=1, cols=2)
-    sig_tbl.autofit = False
-    sig_tbl.alignment = WD_TABLE_ALIGNMENT.LEFT
-    _fix_table(sig_tbl, width_cm=PAGE_W_CM)
-    sig_tbl.columns[0].width = Cm(8.0)
-    sig_tbl.columns[1].width = Cm(9.0)
+        sig_tbl = doc.add_table(rows=1, cols=2)
+        sig_tbl.autofit = False
+        sig_tbl.alignment = WD_TABLE_ALIGNMENT.LEFT
+        _fix_table(sig_tbl, width_cm=PAGE_W_CM)
+        sig_tbl.columns[0].width = Cm(8.0)
+        sig_tbl.columns[1].width = Cm(9.0)
 
-    def _sig_cell(cell, title: str, lines: list):
-        from docx.oxml.ns import qn as _qn
-        from docx.oxml import OxmlElement as _el
-        tc = cell._tc
-        tcPr = tc.get_or_add_tcPr()
-        tcBorders = _el("w:tcBorders")
-        for side in ("top", "left", "bottom", "right"):
-            b = _el(f"w:{side}")
-            b.set(_qn("w:val"), "single")
-            b.set(_qn("w:sz"), "4")
-            b.set(_qn("w:color"), "CCCCCC")
-            tcBorders.append(b)
-        tcPr.append(tcBorders)
+        def _sig_cell(cell, title: str, lines: list):
+            from docx.oxml.ns import qn as _qn
+            from docx.oxml import OxmlElement as _el
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            tcBorders = _el("w:tcBorders")
+            for side in ("top", "left", "bottom", "right"):
+                b = _el(f"w:{side}")
+                b.set(_qn("w:val"), "single")
+                b.set(_qn("w:sz"), "4")
+                b.set(_qn("w:color"), "CCCCCC")
+                tcBorders.append(b)
+            tcPr.append(tcBorders)
 
-        p = cell.paragraphs[0]
-        _zero_para_spacing(p)
-        _run(p, title, size=9, color=COL_ACCENT, bold=True)
-        for line in lines:
-            pl = cell.add_paragraph()
-            _zero_para_spacing(pl)
-            _run(pl, line, size=8, color=RGBColor(90, 99, 93))
-        for _ in range(3):
-            pe = cell.add_paragraph()
-            _zero_para_spacing(pe)
+            p = cell.paragraphs[0]
+            _zero_para_spacing(p)
+            _run(p, title, size=9, color=COL_ACCENT, bold=True)
+            for line in lines:
+                pl = cell.add_paragraph()
+                _zero_para_spacing(pl)
+                _run(pl, line, size=8, color=RGBColor(90, 99, 93))
+            for _ in range(3):
+                pe = cell.add_paragraph()
+                _zero_para_spacing(pe)
 
-    _sig_cell(
-        sig_tbl.cell(0, 0),
-        "Bon pour accord",
-        ["Fait a : _________________________________",
-         "Le : _______ / _______ / ___________"],
-    )
-    _sig_cell(sig_tbl.cell(0, 1), "Signature du client", [])
+        if signature_nom_signataire:
+            lignes_gauche = [f"Signe electroniquement par {signature_nom_signataire}"]
+            formatted_sig_date = _fmt_signature_date(signature_date)
+            if formatted_sig_date:
+                lignes_gauche.append(f"Le {formatted_sig_date}")
+        else:
+            lignes_gauche = [
+                "Fait a : _________________________________",
+                "Le : _______ / _______ / ___________",
+            ]
+        _sig_cell(sig_tbl.cell(0, 0), "Bon pour accord", lignes_gauche)
+        _sig_cell(sig_tbl.cell(0, 1), "Signature du client", [])
+
+        # Signature capturée (Batch 12 T3) : dessin à main levée en priorité,
+        # sinon le nom en italique comme repli.
+        image_inseree = False
+        if signature_image_base64:
+            try:
+                img_bytes = base64.b64decode(signature_image_base64)
+                right_cell = sig_tbl.cell(0, 1)
+                p_img = right_cell.add_paragraph()
+                _zero_para_spacing(p_img)
+                p_img.add_run().add_picture(BytesIO(img_bytes), width=Cm(6.0))
+                image_inseree = True
+            except Exception as exc:
+                logging.warning("[WORD] echec insertion image signature, repli sur le nom : %s", exc)
+
+        if not image_inseree and signature_nom_signataire:
+            right_cell = sig_tbl.cell(0, 1)
+            p_nom = right_cell.add_paragraph()
+            _zero_para_spacing(p_nom)
+            _run(p_nom, signature_nom_signataire, size=13, color=RGBColor(30, 30, 30), italic=True)
 
     buf = BytesIO()
     doc.save(buf)

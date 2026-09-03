@@ -1,0 +1,43 @@
+name: Expiration automatique des devis
+
+# Passe au statut "expiré" tout devis envoyé dont la date de validité est
+# dépassée (date_envoi + validite_jours < aujourd'hui), via la RPC Postgres
+# expire_devis_perimes(). Tourne quotidiennement.
+#
+# ⚠️ Sécurité (Batch 12 T1) : cette RPC MODIFIE des données (contrairement au
+# ping du keepalive qui ne fait que lire). Elle utilise donc un secret dédié
+# SUPABASE_SERVICE_ROLE_KEY — jamais la clé anon, qui est publique (visible
+# dans le bundle JS du frontend) et permettrait sinon à n'importe qui de
+# déclencher l'expiration en masse à volonté. Ne jamais réutiliser la clé
+# anon du workflow supabase-keepalive.yml ici.
+
+on:
+  schedule:
+    - cron: "0 5 * * *"   # tous les jours à 05h00 UTC
+  workflow_dispatch: {}    # déclenchement manuel depuis l'onglet Actions
+
+jobs:
+  expire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Appeler la RPC expire_devis_perimes
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          http_code=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST "${SUPABASE_URL}/rest/v1/rpc/expire_devis_perimes" \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+
+          echo "HTTP status: ${http_code}"
+          echo "Réponse : $(cat /tmp/response.json)"
+
+          if [ "${http_code}" -ge 400 ]; then
+            echo "Échec de l'appel RPC (HTTP ${http_code})."
+            exit 1
+          fi
+
+          echo "Devis expirés aujourd'hui : $(cat /tmp/response.json)"

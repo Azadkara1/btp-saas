@@ -5,7 +5,7 @@
  */
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
-import { exportToPdf } from "@/lib/api";
+import { exportToPdf, SignatureExportOptions } from "@/lib/api";
 import { Devis } from "@/lib/types";
 
 interface PdfExportButtonProps {
@@ -14,9 +14,10 @@ interface PdfExportButtonProps {
   withTva: boolean;
   documentDate: string;
   filename?: string;
+  signature?: SignatureExportOptions;
 }
 
-export default function PdfExportButton({ devis, documentType, withTva, documentDate, filename }: PdfExportButtonProps) {
+export default function PdfExportButton({ devis, documentType, withTva, documentDate, filename, signature }: PdfExportButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,7 +25,7 @@ export default function PdfExportButton({ devis, documentType, withTva, document
     setLoading(true);
     setError(null);
     try {
-      await exportToPdf(devis, documentType, withTva, documentDate, filename);
+      await exportToPdf(devis, documentType, withTva, documentDate, filename, signature);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur génération PDF.");
     } finally {

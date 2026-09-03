@@ -8,7 +8,6 @@ import logging
 import re
 from collections import Counter
 import anthropic
-from typing import Optional
 
 from app.core.config import get_settings
 from app.core.prompts import QUOTE_SYSTEM_PROMPT
@@ -85,6 +84,9 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
                 a = result.devis.artisan
                 if request.artisan_iban:         a.iban         = request.artisan_iban
                 if request.artisan_bic:          a.bic          = request.artisan_bic
+                if request.artisan_assurance_nom:         a.assurance_nom         = request.artisan_assurance_nom
+                if request.artisan_assurance_contrat:     a.assurance_contrat     = request.artisan_assurance_contrat
+                if request.artisan_assurance_couverture:  a.assurance_couverture  = request.artisan_assurance_couverture
                 if request.artisan_adresse:      a.adresse      = request.artisan_adresse
                 if request.artisan_code_postal:  a.code_postal  = request.artisan_code_postal
                 if request.artisan_ville:        a.ville        = request.artisan_ville
@@ -92,14 +94,18 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
                 if request.artisan_email:        a.email        = request.artisan_email
                 if request.artisan_site_web:     a.site_web     = request.artisan_site_web
                 if request.artisan_logo_base64:  a.logo_base64  = request.artisan_logo_base64
+                if request.client_email:         result.devis.client.email = request.client_email
                 if request.numero_document:
                     result.devis.numero_document = request.numero_document
                 if request.remise_type:    result.devis.remise_type   = request.remise_type
                 if request.remise_valeur:  result.devis.remise_valeur = request.remise_valeur
                 if request.acompte:        result.devis.acompte       = request.acompte
+                if request.retenue_garantie_taux: result.devis.retenue_garantie_taux = request.retenue_garantie_taux
+                result.devis.autoliquidation = request.autoliquidation
                 result.devis.modele = request.modele or "moderne"
                 result.devis.validite_jours = request.validite_jours
                 if request.conditions_paiement: result.devis.conditions_paiement = request.conditions_paiement
+                result.devis.afficher_signature = request.afficher_signature
                 # Garde-fou : avertir si plusieurs lignes de natures différentes ont le même PU
                 pus = [round(l.prix_unitaire_ht, 2) for l in result.devis.lignes]
                 duplicates = [pu for pu, cnt in Counter(pus).items() if cnt > 1]

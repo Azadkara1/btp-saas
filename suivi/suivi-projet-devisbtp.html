@@ -115,8 +115,8 @@
   <header class="top">
     <div class="brand">
       <h1>Tableau de bord — DevisBTP</h1>
-      <span class="src">source · CLAUDE.md · 2 juillet 2026</span>
-      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. <strong>🚀 Étape 1 MVP terminée et en production (Render + Vercel).</strong> Étape 2 en cours : Auth Supabase <strong>Lot 1 ✅</strong> — Persistance profil <strong>Lot 2 ✅</strong> — Documents/historique &amp; Numérotation <strong>Lots 3 &amp; 4 ✅</strong> — Stripe (Lot 5) à venir.</p>
+      <span class="src">source · CLAUDE.md · 18 août 2026 (Batch 11)</span>
+      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. <strong>🚀 Étape 1 MVP terminée et en production (Render + Vercel).</strong> Étape 2 en cours : Auth <strong>Lot 1 ✅</strong> — Profil <strong>Lot 2 ✅</strong> — Documents/Numérotation <strong>Lots 3 &amp; 4 ✅</strong> — Cycle de vie complet (statuts, conversion, lots, clients, dashboard, anti-pause) <strong>Batch 10 ✅</strong> — Conformité, suppression, tests, email, expiration <strong>Batch 11 ✅</strong> — Stripe (Lot 5) à venir.</p>
     </div>
     <div class="progress-card">
       <div class="lbl">Avancement global</div>
@@ -514,9 +514,59 @@ const SEED = {cards:[
   {id:'d81', col:'done', etape:2, tags:['Front','Back','BDD'],
    title:'Historique : titre = nom de fichier + n° = réf. devis',
    desc:'Ajout colonnes documents.titre (nom du fichier PDF/Word, ex. Devis_DEVIS-001_Martin) et documents.numero_document (réf. saisie dans le formulaire, ex. DEVIS-001). doAutoSave passe titre = buildDefaultFilename() + numero_document = devis.numero_document. HistoriqueView affiche doc.titre comme libellé principal et doc.numero_document en sous-titre — le séquentiel légal DEV-YYYY-NNN est conservé en BDD mais n\'est plus affiché dans la liste.'},
+  {id:'d82', col:'done', etape:2, tags:['Front'],
+   title:'Noms de lots éditables dans QuotePreview',
+   desc:'Le bandeau de lot (ex. "LOT 1 — Peinture") est un EditableText cliquable. renameLot() propage le nouveau nom à toutes les lignes du groupe (l.lot === oldLot), pas seulement à la ligne cliquée — préserve le regroupement. Propagé via onUpdate.'},
+  {id:'d83', col:'done', etape:2, tags:['Back','Front','PDF','Word'],
+   title:'Case "Bon pour accord" optionnelle (cochée par défaut)',
+   desc:'devis.afficher_signature: bool = True dans quote.py (Devis + QuoteRequest), miroir dans types.ts. Injecté post-génération dans claude_service.py, même logique que modele. Toggle dans QuoteForm (accordéon "Paramètres du document") et dans QuotePreview (propagé via onUpdate). pdf_service.py : encadré signature + mention légale "Bon pour accord" conditionnels, footer_h ajusté (-34mm si masqué). word_service.py : même condition sur la table de signature.'},
   {id:'t06b', col:'todo', etape:2, tags:['Back'],
    title:'Lot 5 — Abonnements Stripe',
-   desc:'Plans Freemium / Pro. Gestion des quotas (nb de devis/mois).'},
+   desc:'Plans Freemium / Pro. Gestion des quotas (nb de devis/mois). Doit remplacer le rate limiting in-memory par IP de quotes.py (ne survit ni au redémarrage ni au multi-instance sur Render).'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 10 — Cycle de vie complet du document (18 août 2026)
+  // ══════════════════════════════════════════════
+  {id:'d84', col:'done', etape:2, tags:['Bug','PDF','Word'],
+   title:'Fix bug afficher_signature — mention "accord" résiduelle',
+   desc:'Diagnostic de toute la chaîne (QuotePreview → page.tsx → api.ts → claude_service.py → pdf/word_service.py) : chaque maillon était déjà correct, vérifié par test HTTP complet. Bug réel : une mention "Bon pour accord" déjà présente dans mentions_legales (générée par Claude) restait affichée même afficher_signature=False — seule l\'auto-insertion était conditionnée. Fix dans pdf_service.py + word_service.py. Logs [PDF]/[WORD] + console.log frontend ajoutés.'},
+  {id:'d85', col:'done', etape:2, tags:['BDD','Back','Front'],
+   title:'Dates de transition + statuts refusé/expiré',
+   desc:'Colonnes date_envoi/date_signature/date_paiement/date_refus (timestamptz, nullable, jamais rétroactives). Statuts refusé/expiré ajoutés à documents_statut_check (avec accents). Index (user_id,statut) + (user_id,date_document). PATCH /documents/{id} horodate la transition de façon idempotente. Boutons de transition dynamiques par statut (STATUT_TRANSITIONS) + badges colorés dans page.tsx/HistoriqueView.tsx.'},
+  {id:'d86', col:'done', etape:2, tags:['Back','Front'],
+   title:'Devis → Facture en 1 clic + Duplication',
+   desc:'POST /documents/{id}/convert (devis signé → facture brouillon, filiation via document_source_id, numéro remis à NULL) et POST /documents/{id}/duplicate (copie conforme). Icônes par ligne dans HistoriqueView.tsx + boutons dans la toolbar (conversion visible seulement sur devis signé).'},
+  {id:'d87', col:'done', etape:2, tags:['Front'],
+   title:'Gestion complète des lots dans QuotePreview',
+   desc:'Bouton "+ Nouveau lot" (nom unique auto-incrémenté). Suppression de lot : les lignes repassent "sans lot", jamais supprimées. Réassignation d\'une ligne à un autre lot via <select> (remplace l\'ancien champ texte libre, évite les lots fantômes). Vérifié PDF+Word pour 0/1/lignes mixtes.'},
+  {id:'d88', col:'done', etape:2, tags:['BDD','Back','Front'],
+   title:'Onglet Clients',
+   desc:'routers/clients.py : GET /clients (nb documents + CA total par client), GET /clients/{id} (fiche + historique), PUT /clients/{id}. ClientsView.tsx : liste triable (nom/CA/nb documents), fiche éditable, historique cliquable → réouverture QuotePreview. Bouton "Clients" dans le header.'},
+  {id:'d89', col:'done', etape:2, tags:['BDD','Back','Front'],
+   title:'Dashboard — statistiques agrégées',
+   desc:'Fonction Postgres get_dashboard_stats — agrégation 100% SQL (CA par statut, taux conversion, panier moyen, délai signature, répartition statuts, CA/mois 12 mois via generate_series, top 10 prestations via jsonb_array_elements). DashboardView.tsx : KPI + recharts (bar chart CA mensuel, camembert statuts), tableau top prestations, état vide engageant.'},
+  {id:'d90', col:'done', etape:2, tags:['Back'],
+   title:'Anti-pause Supabase (GitHub Actions)',
+   desc:'.github/workflows/supabase-keepalive.yml : cron tous les 3 jours + workflow_dispatch, ping /rest/v1/entreprises, codes 200/401/403 = succès. Secrets SUPABASE_URL/SUPABASE_ANON_KEY (jamais la service_role). Corrige le symptôme ERR_NAME_NOT_RESOLVED des projets gratuits inactifs.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 11 — Conformité, suppression, envoi & tests (18 août 2026)
+  // ══════════════════════════════════════════════
+  {id:'d91', col:'done', etape:2, tags:['BDD','Back','Front','PDF','Word'],
+   title:'T1 — Assurance professionnelle & décennale',
+   desc:'3 champs assurance_nom/assurance_contrat/assurance_couverture (mention obligatoire BTP) sur ArtisanInfo, ProfileEntreprise, QuoteRequest — même pattern qu\'IBAN/BIC, injection post-génération jamais envoyée à Claude (génération ET import). Affiché en PDF/Word juste après le RIB, footer_h ajusté. Vérifié par extraction de texte PDF (0/1/3 champs, big lot 40 lignes, 2 modèles) — aucune ligne invisible.'},
+  {id:'d92', col:'done', etape:2, tags:['BDD','Back','Front'],
+   title:'T2 — Suppression de documents (soft delete)',
+   desc:'Colonne deleted_at — jamais de DELETE physique (un document avec numéro légal ne doit jamais disparaître). DELETE /documents/{id} refuse en HTTP 409 si statut hors brouillon/refusé. Exclu de GET /documents, GET /clients(/{id}) et get_dashboard_stats. Icône poubelle + confirmation dans HistoriqueView.tsx.'},
+  {id:'d93', col:'done', etape:2, tags:['Back','Bug'],
+   title:'T3 — Tests de non-régression PDF/Word',
+   desc:'backend/tests/ (pytest + pypdf, extraction texte réelle, pas de mock). 18 tests (2 modèles × 5/4 cas) : lignes visibles, big lot 40 lignes avec saut de page, signature masquée, "au réel", art. 293 B sans TVA. Remplace les 3 règles anti-texte-invisible documentées en commentaire par des assertions automatiques. tests/README.md avec la commande Windows.'},
+  {id:'d94', col:'done', etape:2, tags:['Back','Front','BDD'],
+   title:'T4 — Envoi du devis par email (Resend)',
+   desc:'Fournisseur Resend validé (gratuit jusqu\'à 3000 emails/mois). Champ email client ajouté (n\'existait pas). POST /documents/{id}/send : génère le PDF, envoie l\'email EN PREMIER (si échec → rien n\'est écrit en base, aucun numéro gaspillé), archive en Storage (best-effort), transitionne brouillon→envoyé via un helper partagé avec PATCH (pas de duplication). SendEmailModal.tsx (email pré-rempli, message modifiable).'},
+  {id:'d95', col:'done', etape:2, tags:['BDD','Back'],
+   title:'T5 — Expiration automatique des devis',
+   desc:'RPC expire_devis_perimes() (SECURITY DEFINER — appelée via la clé anon depuis un GitHub Action, RLS bypass nécessaire). Colonne date_expiration dédiée (≠ date_refus). validite_jours=NULL n\'expire jamais. Nouveau workflow quotidien expire-devis.yml (réutilise les secrets existants, bonus anti-pause).'},
 
   // ══════════════════════════════════════════════
   //  À FAIRE — Étape 3

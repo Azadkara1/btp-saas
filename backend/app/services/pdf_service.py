@@ -61,6 +61,19 @@ def _fmt_date(iso_date: Optional[str]) -> str:
     return date_class.today().strftime("%d/%m/%Y")
 
 
+def _fmt_signature_date(iso_datetime: Optional[str]) -> Optional[str]:
+    """Formate un horodatage de signature (colonne `date_signature`, ISO avec fuseau)
+    en 'JJ/MM/AAAA à HH:MM'. None si absent — ne jamais inventer une date."""
+    if not iso_datetime:
+        return None
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(iso_datetime.replace("Z", "+00:00"))
+        return dt.strftime("%d/%m/%Y à %H:%M")
+    except Exception:
+        return iso_datetime  # repli : brut plutôt que rien
+
+
 def _logo_dimensions(logo_data: bytes) -> tuple[float, float]:
     """Calcule la largeur et hauteur du logo (mm) en respectant l'aspect ratio."""
     W_MAX, H_MAX = 38.0, 28.0
@@ -82,8 +95,19 @@ def generate_quote_pdf(
     document_type: str = "devis",
     with_tva: bool = True,
     document_date: Optional[str] = None,
+    signature_nom_signataire: Optional[str] = None,
+    signature_image_base64: Optional[str] = None,
+    signature_date: Optional[str] = None,
 ) -> bytes:
-    """Génère le PDF et retourne les bytes."""
+    """Génère le PDF et retourne les bytes.
+
+    signature_nom_signataire / signature_image_base64 : capturés lors de la
+    signature électronique (Batch 12 T3), métadonnée du document — pas du
+    devis lui-même, donc jamais dans `Devis`/`quote.py`. Si renseignés,
+    l'encadré "Signature du client" affiche la vraie signature au lieu de
+    rester vide.
+    """
+    logging.info("[PDF] afficher_signature=%s document_type=%s signe=%s", devis.afficher_signature, document_type, bool(signature_nom_signataire))
     try:
         from fpdf import FPDF
     except ImportError:
@@ -92,7 +116,12 @@ def generate_quote_pdf(
     modele    = (devis.modele or "moderne").lower()
     is_pro    = (modele == "pro")
     FONT      = "Times" if is_pro else "Helvetica"
-    doc_label = "FACTURE" if document_type == "facture" else "DEVIS"
+    if devis.type_facture == "acompte":
+        doc_label = "FACTURE D'ACOMPTE"
+    elif devis.type_facture == "solde":
+        doc_label = "FACTURE DE SOLDE"
+    else:
+        doc_label = "FACTURE" if document_type == "facture" else "DEVIS"
     doc_date  = _fmt_date(document_date)
 
     pdf = FPDF(format="A4")
@@ -520,6 +549,7 @@ def generate_quote_pdf(
     totaux  = devis.totaux
     has_remise  = (totaux.remise_ht or 0) > 0
     has_acompte = (devis.acompte or 0) > 0
+    has_retenue = (devis.retenue_garantie_taux or 0) > 0
 
     pdf.set_fill_color(*LIGHT_GRAY)
 
@@ -566,10 +596,18 @@ def generate_quote_pdf(
             _tot_row("Total HT net", _fmt_money(ht_net))
         _tot_row("Total TVA", _fmt_money(totaux.total_tva))
         _tot_row_accent("TOTAL TTC", _fmt_money(totaux.total_ttc))
+        net = totaux.total_ttc
         if has_acompte:
             pdf.ln(2)
             _tot_row(_safe("Acompte vers\xe9"), "- " + _fmt_money(devis.acompte or 0), first=True)
             net = totaux.net_a_payer if totaux.net_a_payer else max(0, totaux.total_ttc - (devis.acompte or 0))
+            _tot_row_accent("NET A PAYER", _fmt_money(net))
+        if has_retenue:
+            pdf.ln(2)
+            retenue_montant = round(totaux.total_ttc * (devis.retenue_garantie_taux or 0) / 100, 2)
+            retenue_label = _safe(f"Retenue de garantie ({devis.retenue_garantie_taux:g}%)")
+            _tot_row(retenue_label, "- " + _fmt_money(retenue_montant), first=True)
+            net = max(0, net - retenue_montant)
             _tot_row_accent("NET A PAYER", _fmt_money(net))
     else:
         if has_remise:
@@ -579,11 +617,19 @@ def generate_quote_pdf(
             _tot_row_accent("TOTAL HT NET", _fmt_money(ht_net))
         else:
             _tot_row_accent("TOTAL HT", _fmt_money(totaux.total_ht))
+        ht_base = totaux.total_ht_net if totaux.total_ht_net else totaux.total_ht
+        net = ht_base
         if has_acompte:
             pdf.ln(2)
-            ht_base = totaux.total_ht_net if totaux.total_ht_net else totaux.total_ht
             _tot_row(_safe("Acompte vers\xe9"), "- " + _fmt_money(devis.acompte or 0), first=True)
             net = totaux.net_a_payer if totaux.net_a_payer else max(0, ht_base - (devis.acompte or 0))
+            _tot_row_accent("NET A PAYER", _fmt_money(net))
+        if has_retenue:
+            pdf.ln(2)
+            retenue_montant = round(ht_base * (devis.retenue_garantie_taux or 0) / 100, 2)
+            retenue_label = _safe(f"Retenue de garantie ({devis.retenue_garantie_taux:g}%)")
+            _tot_row(retenue_label, "- " + _fmt_money(retenue_montant), first=True)
+            net = max(0, net - retenue_montant)
             _tot_row_accent("NET A PAYER", _fmt_money(net))
 
     pdf.ln(4)
@@ -600,13 +646,15 @@ def generate_quote_pdf(
                 final_mentions.append(f"Devis valable {validite} jours a compter de la date d'emission")
         elif not with_tva and "tva" in ml:
             pass  # Masquer toutes les mentions TVA taux en mode sans TVA
+        elif not devis.afficher_signature and "accord" in ml:
+            pass  # Masquer toute mention "Bon pour accord" si l'encadré signature est désactivé
         else:
             final_mentions.append(m)
 
     if document_type == "devis":
         if validite and not any("valable" in m.lower() for m in final_mentions):
             final_mentions.insert(0, f"Devis valable {validite} jours a compter de la date d'emission")
-        if not any("accord" in m.lower() for m in final_mentions):
+        if devis.afficher_signature and not any("accord" in m.lower() for m in final_mentions):
             final_mentions.append("Signature du client precedee de la mention 'Bon pour accord'")
     else:
         if not any("retard" in m.lower() or "penalite" in m.lower() for m in final_mentions):
@@ -618,15 +666,48 @@ def generate_quote_pdf(
     if devis.conditions_paiement:
         final_mentions.append(f"Conditions de paiement : {devis.conditions_paiement}")
 
+    # T4-4 : TVA a taux reduit (10%/5.5%) specifique travaux — mention obligatoire
+    # de l'attestation client. Non pertinent en autoliquidation (TVA due par le
+    # preneur, pas de taux reduit a justifier sur CETTE facture).
+    if with_tva and not devis.autoliquidation:
+        taux_presents = {round(l.tva_taux, 2) for l in devis.lignes}
+        if 10.0 in taux_presents:
+            final_mentions.append(
+                "TVA a 10% appliquee sur attestation du client certifiant l'eligibilite des travaux "
+                "(art. 279-0 bis du CGI - logement acheve depuis plus de 2 ans)"
+            )
+        if 5.5 in taux_presents:
+            final_mentions.append(
+                "TVA a 5,5% appliquee sur attestation du client certifiant l'eligibilite des travaux "
+                "(art. 278-0 bis A du CGI - amelioration de la qualite energetique)"
+            )
+
+    # T4-5 : Autoliquidation (sous-traitance BTP) — mention obligatoire,
+    # remplace toute mention de franchise en base (art. 293 B) : ce sont deux
+    # regimes distincts et mutuellement exclusifs.
+    if devis.autoliquidation:
+        final_mentions.append(
+            "Autoliquidation de la TVA - Article 283-2 nonies du CGI - TVA due par le preneur"
+        )
+
     # T2 : Estimation de la hauteur du bloc footer → saut de page si besoin
     has_rib   = bool(devis.artisan.iban or devis.artisan.bic)
     rib_lines = (1 if devis.artisan.iban else 0) + (1 if devis.artisan.bic else 0)
+    has_assurance = bool(
+        devis.artisan.assurance_nom or devis.artisan.assurance_contrat or devis.artisan.assurance_couverture
+    )
+    assurance_lines = (
+        (1 if devis.artisan.assurance_nom else 0)
+        + (1 if devis.artisan.assurance_contrat else 0)
+        + (1 if devis.artisan.assurance_couverture else 0)
+    )
     footer_h  = (
         5                                                 # séparateur + espacement
         + len(final_mentions) * 4                        # mentions (1 ligne ≈ 4 mm)
-        + (4 if not with_tva else 0)                     # art. 293 B
+        + (4 if (not with_tva and not devis.autoliquidation) else 0)  # art. 293 B
         + (4 + 4 + rib_lines * 4 + 4 if has_rib else 0) # RIB section
-        + 34                                              # signature (ln6 + sig_h22 + marges)
+        + (4 + 4 + assurance_lines * 4 + 4 if has_assurance else 0)  # assurance pro (T1 Batch 11)
+        + (34 if devis.afficher_signature else 0)        # signature (ln6 + sig_h22 + marges)
     )
     if pdf.get_y() + footer_h > pdf.h - 15:
         pdf.add_page()
@@ -642,7 +723,7 @@ def generate_quote_pdf(
     for m in final_mentions:
         pdf.cell(0, 4, _safe(f"* {m}"), ln=True)
 
-    if not with_tva:
+    if not with_tva and not devis.autoliquidation:
         pdf.set_font(FONT, "B", 7)
         pdf.cell(0, 4, "* TVA non applicable, art. 293 B du CGI", ln=True)
 
@@ -662,34 +743,82 @@ def generate_quote_pdf(
         if devis.artisan.bic:
             pdf.cell(0, 4, _safe(f"BIC/SWIFT : {devis.artisan.bic}"), ln=True)
 
+    # ── ASSURANCE PROFESSIONNELLE / DÉCENNALE (mention obligatoire BTP) ──
+    if has_assurance:
+        pdf.ln(4)
+        pdf.set_draw_color(*BORDER)
+        pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+        pdf.ln(3)
+        pdf.set_font(FONT, "B", 8)
+        pdf.set_text_color(*ACCENT)
+        pdf.cell(0, 4, "Assurance professionnelle", ln=True)
+        pdf.set_font(FONT, "", 8)
+        pdf.set_text_color(*BLACK)
+        if devis.artisan.assurance_nom:
+            pdf.cell(0, 4, _safe(f"Assureur : {devis.artisan.assurance_nom}"), ln=True)
+        if devis.artisan.assurance_contrat:
+            pdf.cell(0, 4, _safe(f"N\xb0 de contrat : {devis.artisan.assurance_contrat}"), ln=True)
+        if devis.artisan.assurance_couverture:
+            pdf.cell(0, 4, _safe(f"Couverture geographique : {devis.artisan.assurance_couverture}"), ln=True)
+
     # ── ZONE DE SIGNATURE ────────────────────────────────────────────
-    pdf.ln(6)
-    sig_y = pdf.get_y()
-    pdf.set_y(sig_y)
+    if devis.afficher_signature:
+        pdf.ln(6)
+        sig_y = pdf.get_y()
+        pdf.set_y(sig_y)
 
-    sig_w  = 82.0
-    sig_h  = 22.0
-    sig_x2 = 15 + sig_w + 16
+        sig_w  = 82.0
+        sig_h  = 22.0
+        sig_x2 = 15 + sig_w + 16
 
-    pdf.set_draw_color(*BORDER)
-    pdf.set_line_width(0.4)
+        pdf.set_draw_color(*BORDER)
+        pdf.set_line_width(0.4)
 
-    pdf.rect(15, sig_y, sig_w, sig_h)
-    pdf.set_xy(17, sig_y + 2)
-    pdf.set_font(FONT, "B", 8)
-    pdf.set_text_color(*ACCENT)
-    pdf.cell(sig_w - 4, 5, "Bon pour accord", border=0)
-    pdf.set_font(FONT, "", 7.5)
-    pdf.set_text_color(*MUTED_TEXT)
-    pdf.set_xy(17, sig_y + 9)
-    pdf.cell(sig_w - 4, 4, _safe("Fait a : _________________________________"), border=0)
-    pdf.set_xy(17, sig_y + 14)
-    pdf.cell(sig_w - 4, 4, "Le : _______ / _______ / ___________", border=0)
+        pdf.rect(15, sig_y, sig_w, sig_h)
+        pdf.set_xy(17, sig_y + 2)
+        pdf.set_font(FONT, "B", 8)
+        pdf.set_text_color(*ACCENT)
+        pdf.cell(sig_w - 4, 5, "Bon pour accord", border=0)
+        pdf.set_font(FONT, "", 7.5)
+        pdf.set_text_color(*MUTED_TEXT)
+        if signature_nom_signataire:
+            pdf.set_xy(17, sig_y + 9)
+            pdf.cell(sig_w - 4, 4, _safe(f"Signe electroniquement par {signature_nom_signataire}"), border=0)
+            formatted_sig_date = _fmt_signature_date(signature_date)
+            if formatted_sig_date:
+                pdf.set_xy(17, sig_y + 14)
+                pdf.cell(sig_w - 4, 4, _safe(f"Le {formatted_sig_date}"), border=0)
+        else:
+            pdf.set_xy(17, sig_y + 9)
+            pdf.cell(sig_w - 4, 4, _safe("Fait a : _________________________________"), border=0)
+            pdf.set_xy(17, sig_y + 14)
+            pdf.cell(sig_w - 4, 4, "Le : _______ / _______ / ___________", border=0)
 
-    pdf.rect(sig_x2, sig_y, sig_w, sig_h)
-    pdf.set_xy(sig_x2 + 2, sig_y + 2)
-    pdf.set_font(FONT, "B", 8)
-    pdf.set_text_color(*ACCENT)
-    pdf.cell(sig_w - 4, 5, "Signature du client", border=0)
+        pdf.rect(sig_x2, sig_y, sig_w, sig_h)
+        pdf.set_xy(sig_x2 + 2, sig_y + 2)
+        pdf.set_font(FONT, "B", 8)
+        pdf.set_text_color(*ACCENT)
+        pdf.cell(sig_w - 4, 5, "Signature du client", border=0)
+
+        # Signature capturée (Batch 12 T3) : dessin à main levée en priorité,
+        # sinon le nom en italique comme repli. Ne touche jamais le rendu si
+        # le document n'est pas encore signé (comportement inchangé).
+        image_inseree = False
+        if signature_image_base64:
+            try:
+                img_bytes = base64.b64decode(signature_image_base64)
+                pdf.image(BytesIO(img_bytes), x=sig_x2 + 4, y=sig_y + 8, w=sig_w - 8, h=sig_h - 10)
+                image_inseree = True
+            except Exception as exc:
+                logging.warning("[PDF] echec insertion image signature, repli sur le nom : %s", exc)
+
+        if not image_inseree and signature_nom_signataire:
+            pdf.set_font(FONT, "I", 13)
+            pdf.set_text_color(*BLACK)
+            pdf.set_xy(sig_x2 + 4, sig_y + 11)
+            pdf.cell(sig_w - 8, 6, _safe(signature_nom_signataire), border=0)
+            # Reset — dernier élément dessiné, mais on respecte la règle (C)
+            # (toujours reposer un état propre après un texte non "body").
+            _set_body()
 
     return bytes(pdf.output())

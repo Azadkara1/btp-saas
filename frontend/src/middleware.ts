@@ -27,7 +27,10 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const path = request.nextUrl.pathname
-  const isPublicPath = path.startsWith('/login') || path.startsWith('/auth')
+  // /devis/[token] : page publique de signature électronique (Batch 12 T3) —
+  // consultée par le CLIENT de l'artisan, jamais connecté à l'app. Ne jamais
+  // la protéger par l'auth sous peine de rediriger tout visiteur vers /login.
+  const isPublicPath = path.startsWith('/login') || path.startsWith('/auth') || path.startsWith('/devis/')
 
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone()

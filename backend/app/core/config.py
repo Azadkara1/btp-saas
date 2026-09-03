@@ -27,12 +27,22 @@ class Settings(BaseSettings):
         """URL du endpoint JWKS Supabase, dérivée de supabase_url."""
         return f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
 
+    # ── Email — Batch 11 T4 (Resend) ─────────────────────────────
+    # Optionnel au démarrage (pas de crash si absent) : email_service.py
+    # lève une erreur explicite au moment de l'envoi si non configuré.
+    resend_api_key: str = ""
+    resend_from_email: str = "onboarding@resend.dev"  # domaine de test Resend — remplacer une fois le domaine vérifié
+
     # ── Stripe (Lot 4) ───────────────────────────────────────────
     # stripe_secret_key: str = ""
 
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"  # tolère les variables présentes dans .env mais non déclarées ici
+        # (ex. SUPABASE_ANON_KEY — utilisée par les workflows GitHub Actions et le
+        # frontend, pas par ce backend ; sans "ignore" son ajout au .env partagé
+        # empêche TOUT démarrage du backend, y compris en production sur Render)
 
 
 @lru_cache()

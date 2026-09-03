@@ -31,3 +31,13 @@ supabase>=2.0.0        # client service_role (bypass RLS, filtrage user_id manue
 # asyncpg==0.29.0
 # sqlalchemy==2.0.30
 # alembic==1.13.1
+
+# Tests — Batch 11 T3 (non-régression PDF/Word)
+pytest>=8.0.0
+pypdf>=4.0.0            # extraction texte PDF pour vérifier le bug texte invisible
+
+# Email — Batch 11 T4 (Resend, appel REST via httpx — pas de SDK dédié)
+email-validator>=2.0.0  # requis par pydantic.EmailStr (SendEmailRequest)
+
+# Lint — Batch 12 T2 (CI) — config minimale dans ruff.toml (F + E9 uniquement)
+ruff>=0.6.0

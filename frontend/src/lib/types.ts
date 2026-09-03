@@ -22,6 +22,7 @@ export interface ClientInfo {
   adresse?: string | null;
   code_postal?: string | null;
   ville?: string | null;
+  email?: string | null;
 }
 
 export interface ArtisanInfo {
@@ -36,6 +37,9 @@ export interface ArtisanInfo {
   logo_base64?: string | null;
   iban?: string | null;
   bic?: string | null;
+  assurance_nom?: string | null;
+  assurance_contrat?: string | null;
+  assurance_couverture?: string | null;
 }
 
 export interface ChantierInfo {
@@ -67,6 +71,10 @@ export interface Devis {
   modele?: string | null;
   validite_jours?: number | null;
   conditions_paiement?: string | null;
+  afficher_signature?: boolean;
+  type_facture?: "acompte" | "solde" | null;
+  retenue_garantie_taux?: number | null;
+  autoliquidation?: boolean;
 }
 
 // ── Profil entreprise (Lot 2) ────────────────────────────────────
@@ -82,7 +90,27 @@ export interface ProfileEntreprise {
   logo_base64?: string | null;
   iban?: string | null;
   bic?: string | null;
+  assurance_nom?: string | null;
+  assurance_contrat?: string | null;
+  assurance_couverture?: string | null;
   modele_prefere: string;
+  // Numérotation personnalisable par compte (Batch 13 T2)
+  devis_numero_debut: number;
+  devis_numero_prefixe: string;
+  devis_numero_inclure_annee: boolean;
+  devis_numero_padding: number;
+  facture_numero_debut: number;
+  facture_numero_prefixe: string;
+  facture_numero_inclure_annee: boolean;
+  facture_numero_padding: number;
+  numero_reset_annuel: boolean;
+}
+
+export interface NumerotationStatus {
+  devis_locked: boolean;
+  devis_prochain_compteur: number;
+  facture_locked: boolean;
+  facture_prochain_compteur: number;
 }
 
 // ── Import meta ─────────────────────────────────────────────────
@@ -122,6 +150,9 @@ export interface QuoteRequest {
   artisan_siret?: string;
   artisan_iban?: string;
   artisan_bic?: string;
+  artisan_assurance_nom?: string;
+  artisan_assurance_contrat?: string;
+  artisan_assurance_couverture?: string;
   artisan_adresse?: string;
   artisan_code_postal?: string;
   artisan_ville?: string;
@@ -131,13 +162,17 @@ export interface QuoteRequest {
   artisan_logo_base64?: string;
   client_nom?: string;
   client_adresse?: string;
+  client_email?: string;
   numero_document?: string;
   validite_jours?: number;
   conditions_paiement?: string;
   remise_type?: string;
   remise_valeur?: number;
   acompte?: number;
+  retenue_garantie_taux?: number;
+  autoliquidation?: boolean;
   modele?: string;
+  afficher_signature?: boolean;
   prix_personnalises?: PrixArtisan[];
 }
 
@@ -150,6 +185,8 @@ export interface QuoteResponse {
 }
 
 // ── Documents (Lots 3 & 4) ───────────────────────────────────────
+export type StatutDocument = "brouillon" | "envoyé" | "signé" | "payé" | "refusé" | "expiré";
+
 export interface DocumentCreate {
   type_doc: string;
   titre?: string | null;
@@ -171,16 +208,130 @@ export interface DocumentSummary {
   numero_document?: string | null;
   client_nom?: string | null;
   total_ttc?: number | null;
-  statut: string;
+  statut: StatutDocument;
   date_document?: string | null;
   created_at: string;
+  document_source_id?: string | null;
+  date_envoi?: string | null;
+  date_signature?: string | null;
+  date_paiement?: string | null;
+  date_refus?: string | null;
+  date_expiration?: string | null;
+  date_email_envoye?: string | null;
+  email_destinataire?: string | null;
+  signature_nom_signataire?: string | null;
 }
 
 export interface DocumentDetail extends DocumentSummary {
   devis_payload: Devis;
+  signature_image_base64?: string | null;
 }
 
 export interface StatusPatchResponse {
   statut: string;
   numero?: string | null;
+}
+
+// ── Envoi par email (Batch 11 T4) ──────────────────────────────────
+export interface SendEmailRequest {
+  email_destinataire: string;
+  message?: string;
+}
+
+export interface SendEmailResponse {
+  statut: string;
+  numero?: string | null;
+  date_email_envoye: string;
+}
+
+// ── Signature électronique publique (Batch 12 T3) ──────────────────
+// ⚠️ Ces types sont volontairement un sous-ensemble restreint — jamais
+// d'IBAN/BIC/email artisan, jamais de user_id. Miroir de app/models/public.py.
+export interface PublicArtisanInfo {
+  nom?: string | null;
+  siret?: string | null;
+  adresse?: string | null;
+  code_postal?: string | null;
+  ville?: string | null;
+  telephone?: string | null;
+  site_web?: string | null;
+  logo_base64?: string | null;
+  assurance_nom?: string | null;
+  assurance_contrat?: string | null;
+  assurance_couverture?: string | null;
+}
+
+export interface PublicClientInfo {
+  nom?: string | null;
+  adresse?: string | null;
+  code_postal?: string | null;
+  ville?: string | null;
+}
+
+export interface PublicDevisView {
+  numero_document?: string | null;
+  statut: StatutDocument;
+  date_document?: string | null;
+  validite_jours?: number | null;
+  conditions_paiement?: string | null;
+  modele?: string | null;
+  afficher_signature: boolean;
+  client: PublicClientInfo;
+  artisan: PublicArtisanInfo;
+  chantier: ChantierInfo;
+  lignes: LigneDevis[];
+  totaux: TotauxDevis;
+  mentions_legales: string[];
+  signable: boolean;
+  deja_signe_par?: string | null;
+  deja_signe_le?: string | null;
+}
+
+export interface SignatureLinkResponse {
+  url: string;
+}
+
+// ── Clients (Phase 4) ────────────────────────────────────────────
+export interface ClientSummary {
+  id: string;
+  nom: string;
+  adresse?: string | null;
+  code_postal?: string | null;
+  ville?: string | null;
+  nb_documents: number;
+  ca_total: number;
+}
+
+export interface ClientDetail extends ClientSummary {
+  documents: DocumentSummary[];
+}
+
+export interface ClientUpdate {
+  nom?: string;
+  adresse?: string;
+  code_postal?: string;
+  ville?: string;
+}
+
+// ── Dashboard (Phase 5) ───────────────────────────────────────────
+export interface CaMoisPoint {
+  mois: string; // "YYYY-MM"
+  ca: number;
+}
+
+export interface TopPrestation {
+  poste: string;
+  ca: number;
+}
+
+export interface DashboardStats {
+  ca_signe: number;
+  ca_en_attente: number;
+  ca_encaisse: number;
+  taux_conversion: number;
+  panier_moyen: number;
+  delai_moyen_signature_jours?: number | null;
+  repartition_statuts: Record<string, number>;
+  ca_par_mois: CaMoisPoint[];
+  top_prestations: TopPrestation[];
 }

@@ -21,7 +21,12 @@ async def export_pdf(
     Le fichier est retourné directement en bytes (application/pdf).
     """
     try:
-        pdf_bytes = generate_quote_pdf(request.devis, request.document_type, request.with_tva, request.document_date)
+        pdf_bytes = generate_quote_pdf(
+            request.devis, request.document_type, request.with_tva, request.document_date,
+            signature_nom_signataire=request.signature_nom_signataire,
+            signature_image_base64=request.signature_image_base64,
+            signature_date=request.signature_date,
+        )
         filename = f"{request.document_type}.pdf"
         return Response(
             content=pdf_bytes,

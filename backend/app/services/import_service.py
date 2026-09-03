@@ -225,6 +225,9 @@ def _inject_artisan(devis: Devis, request: QuoteRequest) -> None:
     if request.artisan_siret:       a.siret       = request.artisan_siret
     if request.artisan_iban:        a.iban        = request.artisan_iban
     if request.artisan_bic:         a.bic         = request.artisan_bic
+    if request.artisan_assurance_nom:         a.assurance_nom         = request.artisan_assurance_nom
+    if request.artisan_assurance_contrat:     a.assurance_contrat     = request.artisan_assurance_contrat
+    if request.artisan_assurance_couverture:  a.assurance_couverture  = request.artisan_assurance_couverture
     if request.artisan_adresse:     a.adresse     = request.artisan_adresse
     if request.artisan_code_postal: a.code_postal = request.artisan_code_postal
     if request.artisan_ville:       a.ville       = request.artisan_ville

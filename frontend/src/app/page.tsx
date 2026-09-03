@@ -1,18 +1,22 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { HardHat, RefreshCw, FileText, Receipt, Percent, Calendar, LogOut, History, Send, CheckCircle } from "lucide-react";
+import { HardHat, RefreshCw, FileText, Receipt, Percent, Calendar, LogOut, History, Send, CheckCircle, XCircle, Clock, Copy, ArrowRightLeft, Users, LayoutDashboard, Link2, Wallet } from "lucide-react";
 import QuoteForm from "@/components/QuoteForm";
 import QuotePreview from "@/components/QuotePreview";
 import PdfExportButton from "@/components/PdfExportButton";
 import WordExportButton from "@/components/WordExportButton";
 import ModelPicker from "@/components/ModelPicker";
-import { QuoteResponse, Devis, DocumentCreate } from "@/lib/types";
+import { QuoteResponse, Devis, DocumentCreate, StatutDocument, SendEmailResponse, DocumentDetail } from "@/lib/types";
 import ImportButton from "@/components/ImportButton";
 import ImportReview from "@/components/ImportReview";
 import HistoriqueView from "@/components/HistoriqueView";
+import ClientsView from "@/components/ClientsView";
+import DashboardView from "@/components/DashboardView";
+import SendEmailModal from "@/components/SendEmailModal";
 import { createClient } from "@/lib/supabase-client";
-import { saveDocument, updateDocumentStatus } from "@/lib/api";
+import { saveDocument, updateDocumentStatus, convertToFacture, duplicateDocument, getSignatureLink, createAcompte, getProfile, getNumerotationStatus } from "@/lib/api";
+import { formatNumeroPreview } from "@/components/QuoteForm";
 
 type DocumentType = "devis" | "facture";
 
@@ -26,6 +30,34 @@ function buildDefaultFilename(devis: Devis, documentType: DocumentType): string 
   const client = devis.client?.nom || "";
   return sanitizeFilename([prefix, num, client].filter(Boolean).join("_"));
 }
+
+// Badges de statut — cohérents avec HistoriqueView.tsx
+const STATUT_BADGE: Record<StatutDocument, { label: string; color: string; bg: string }> = {
+  brouillon: { label: "Brouillon", color: "#6B7280", bg: "#F3F4F6" },
+  "envoyé":  { label: "Envoyé",    color: "#1D4ED8", bg: "#DBEAFE" },
+  "signé":   { label: "Signé",     color: "#7C3AED", bg: "#EDE9FE" },
+  "payé":    { label: "Payé",      color: "#14532D", bg: "#D1FAE5" },
+  "refusé":  { label: "Refusé",    color: "#B91C1C", bg: "#FEE2E2" },
+  "expiré":  { label: "Expiré",    color: "#4B5563", bg: "#E5E7EB" },
+};
+
+// Transitions de statut proposées dans la toolbar, selon le statut courant
+const STATUT_TRANSITIONS: Record<StatutDocument, { statut: StatutDocument; label: string; icon: typeof Send; color: string }[]> = {
+  brouillon: [
+    { statut: "envoyé", label: "Marquer envoyé", icon: Send, color: "#1D4ED8" },
+  ],
+  "envoyé": [
+    { statut: "signé",  label: "Marquer signé",  icon: CheckCircle, color: "#7C3AED" },
+    { statut: "refusé", label: "Marquer refusé", icon: XCircle,     color: "#B91C1C" },
+    { statut: "expiré", label: "Marquer expiré", icon: Clock,       color: "#4B5563" },
+  ],
+  "signé": [
+    { statut: "payé", label: "Marquer payé", icon: CheckCircle, color: "#14532D" },
+  ],
+  "payé": [],
+  "refusé": [],
+  "expiré": [],
+};
 
 function DocTypeToggle({
   value, onChange, size = "md",
@@ -81,11 +113,18 @@ export default function HomePage() {
   const [filenameCustomized, setFilenameCustomized] = useState(false);
   const [importedResponse, setImportedResponse]     = useState<QuoteResponse | null>(null);
   const [importArtisanChoice, setImportArtisanChoice] = useState<"keep" | "replace">("keep");
-  const [activeView, setActiveView]                 = useState<"form" | "historique">("form");
+  const [activeView, setActiveView]                 = useState<"form" | "historique" | "clients" | "dashboard">("form");
   const [savedDocumentId, setSavedDocumentId]       = useState<string | null>(null);
-  const [savedDocumentStatut, setSavedDocumentStatut] = useState<string>("brouillon");
+  const [savedDocumentStatut, setSavedDocumentStatut] = useState<StatutDocument>("brouillon");
+  // Signature capturée (Batch 12 T3) — métadonnée du document, pas du devis
+  // lui-même (jamais dans `result`/`Devis`). Alimente PdfExportButton/WordExportButton.
+  const [signatureInfo, setSignatureInfo] = useState<{ nom?: string | null; imageBase64?: string | null; date?: string | null } | null>(null);
   const [saveFeedback, setSaveFeedback]             = useState<"saving" | "saved" | "error" | null>(null);
   const [markEnvoyeError, setMarkEnvoyeError]       = useState<string | null>(null);
+  const [actionLoading, setActionLoading]           = useState<"convert" | "duplicate" | "signature-link" | "acompte" | null>(null);
+  const [linkCopied, setLinkCopied]                 = useState(false);
+  const [showSendModal, setShowSendModal]           = useState(false);
+  const [sendSuccess, setSendSuccess]               = useState(false);
 
   // Recalcule le nom de fichier si non personnalisé (numero_document ou client peut avoir changé)
   useEffect(() => {
@@ -120,14 +159,39 @@ export default function HomePage() {
     }
   };
 
-  const handleQuoteGenerated = (response: QuoteResponse) => {
+  // Batch 14 : numéro provisoire dès la génération, calculé avec le même
+  // mécanisme que l'aperçu en direct de Batch 13 T2 (lecture seule, jamais
+  // d'incrément) — n'écrase jamais un numero_document déjà renseigné
+  // (Claude, import, ou saisie manuelle). Best-effort : une erreur réseau
+  // ne doit jamais bloquer la génération, juste laisser le champ vide.
+  const computeProvisionalNumero = async (docType: DocumentType): Promise<string | null> => {
+    try {
+      const [profile, numerotationStatus] = await Promise.all([getProfile(), getNumerotationStatus()]);
+      if (!profile) return null;
+      const compteur = docType === "devis" ? numerotationStatus.devis_prochain_compteur : numerotationStatus.facture_prochain_compteur;
+      const prefixe = docType === "devis" ? profile.devis_numero_prefixe : profile.facture_numero_prefixe;
+      const inclureAnnee = docType === "devis" ? profile.devis_numero_inclure_annee : profile.facture_numero_inclure_annee;
+      const padding = docType === "devis" ? profile.devis_numero_padding : profile.facture_numero_padding;
+      return formatNumeroPreview(compteur, prefixe, inclureAnnee, padding);
+    } catch {
+      return null;
+    }
+  };
+
+  const handleQuoteGenerated = async (response: QuoteResponse) => {
     if (response.devis) {
       setFilenameCustomized(false);
       setSavedDocumentId(null);
       setSavedDocumentStatut("brouillon");
-      setResult(response.devis);
+      setSignatureInfo(null);
+      let devis = response.devis;
+      if (!devis.numero_document) {
+        const provisoire = await computeProvisionalNumero(documentType);
+        if (provisoire) devis = { ...devis, numero_document: provisoire };
+      }
+      setResult(devis);
       setTokensUsed(response.tokens_used || null);
-      doAutoSave(response.devis, documentType, documentDate);
+      doAutoSave(devis, documentType, documentDate);
       setTimeout(() => {
         document.getElementById("quote-result")?.scrollIntoView({ behavior: "smooth" });
       }, 100);
@@ -151,7 +215,7 @@ export default function HomePage() {
     }
   };
 
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     if (!importedResponse?.devis) return;
     let finalDevis = importedResponse.devis;
     // "replace" : merge l'émetteur extrait sur l'artisan (zéro appel réseau)
@@ -174,11 +238,16 @@ export default function HomePage() {
         },
       };
     }
+    if (!finalDevis.numero_document) {
+      const provisoire = await computeProvisionalNumero(documentType);
+      if (provisoire) finalDevis = { ...finalDevis, numero_document: provisoire };
+    }
     setResult(finalDevis);
     setImportedResponse(null);
     setTokensUsed(null);
     setSavedDocumentId(null);
     setSavedDocumentStatut("brouillon");
+    setSignatureInfo(null);
     doAutoSave(finalDevis, documentType, documentDate);
     setTimeout(() => {
       document.getElementById("quote-result")?.scrollIntoView({ behavior: "smooth" });
@@ -196,32 +265,38 @@ export default function HomePage() {
     setFilenameCustomized(false);
     setSavedDocumentId(null);
     setSavedDocumentStatut("brouillon");
+    setSignatureInfo(null);
     setSaveFeedback(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleMarkEnvoye = async () => {
+  const handleChangeStatut = async (nextStatut: StatutDocument) => {
     if (!savedDocumentId) return;
     setMarkEnvoyeError(null);
     try {
-      const r = await updateDocumentStatus(savedDocumentId, "envoyé");
-      setSavedDocumentStatut("envoyé");
+      const r = await updateDocumentStatus(savedDocumentId, nextStatut);
+      setSavedDocumentStatut(nextStatut);
       if (r.numero && result) {
         setResult({ ...result, numero_document: r.numero });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("[MARK ENVOYÉ] échec — savedDocumentId:", savedDocumentId, "erreur:", msg);
+      console.error(`[STATUT → ${nextStatut}] échec — savedDocumentId:`, savedDocumentId, "erreur:", msg);
       setMarkEnvoyeError(msg);
       setTimeout(() => setMarkEnvoyeError(null), 8000);
     }
   };
 
-  const handleOpenFromHistory = (devis: Devis, docId: string, statut: string, typeDoc: string) => {
-    setSavedDocumentId(docId);
-    setSavedDocumentStatut(statut);
-    setDocumentType(typeDoc === "facture" ? "facture" : "devis");
-    setResult(devis);
+  const handleOpenFromHistory = (detail: DocumentDetail) => {
+    setSavedDocumentId(detail.id);
+    setSavedDocumentStatut(detail.statut);
+    setDocumentType(detail.type_doc === "facture" ? "facture" : "devis");
+    setResult(detail.devis_payload);
+    setSignatureInfo(
+      detail.signature_nom_signataire
+        ? { nom: detail.signature_nom_signataire, imageBase64: detail.signature_image_base64, date: detail.date_signature }
+        : null
+    );
     setFilenameCustomized(false);
     setActiveView("form");
     setTimeout(() => {
@@ -229,18 +304,101 @@ export default function HomePage() {
     }, 100);
   };
 
+  const handleConvertToFacture = async () => {
+    if (!savedDocumentId) return;
+    setActionLoading("convert");
+    setMarkEnvoyeError(null);
+    try {
+      const created = await convertToFacture(savedDocumentId);
+      handleOpenFromHistory(created);
+    } catch (err) {
+      setMarkEnvoyeError(err instanceof Error ? err.message : "Erreur lors de la conversion en facture");
+      setTimeout(() => setMarkEnvoyeError(null), 8000);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCreateAcompte = async () => {
+    if (!savedDocumentId) return;
+    const saisie = window.prompt("Pourcentage d'acompte à facturer (ex : 30) :", "30");
+    if (saisie === null) return;
+    const pourcentage = parseFloat(saisie.replace(",", "."));
+    if (!Number.isFinite(pourcentage) || pourcentage <= 0 || pourcentage > 100) {
+      setMarkEnvoyeError("Pourcentage invalide (doit être entre 0 et 100).");
+      setTimeout(() => setMarkEnvoyeError(null), 8000);
+      return;
+    }
+    setActionLoading("acompte");
+    setMarkEnvoyeError(null);
+    try {
+      const created = await createAcompte(savedDocumentId, pourcentage);
+      handleOpenFromHistory(created);
+    } catch (err) {
+      setMarkEnvoyeError(err instanceof Error ? err.message : "Erreur lors de la création de la facture d'acompte");
+      setTimeout(() => setMarkEnvoyeError(null), 8000);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDuplicateDocument = async () => {
+    if (!savedDocumentId) return;
+    setActionLoading("duplicate");
+    setMarkEnvoyeError(null);
+    try {
+      const created = await duplicateDocument(savedDocumentId);
+      handleOpenFromHistory(created);
+    } catch (err) {
+      setMarkEnvoyeError(err instanceof Error ? err.message : "Erreur lors de la duplication");
+      setTimeout(() => setMarkEnvoyeError(null), 8000);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCopySignatureLink = async () => {
+    if (!savedDocumentId) return;
+    setActionLoading("signature-link");
+    setMarkEnvoyeError(null);
+    try {
+      const { url } = await getSignatureLink(savedDocumentId);
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 5000);
+    } catch (err) {
+      setMarkEnvoyeError(err instanceof Error ? err.message : "Erreur lors de la génération du lien");
+      setTimeout(() => setMarkEnvoyeError(null), 8000);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleEmailSent = (response: SendEmailResponse) => {
+    setShowSendModal(false);
+    setSavedDocumentStatut("envoyé");
+    if (response.numero && result) {
+      setResult({ ...result, numero_document: response.numero });
+    }
+    setSendSuccess(true);
+    setTimeout(() => setSendSuccess(false), 5000);
+  };
+
   return (
     <main className="min-h-screen" style={{ backgroundColor: "#FAFAF7" }}>
       {/* Header */}
       <header className="bg-white sticky top-0 z-10" style={{ borderBottom: "0.5px solid rgba(20,83,45,0.12)" }}>
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="text-white p-2 rounded-xl" style={{ backgroundColor: "#14532D" }}>
-            <HardHat className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-lg font-black leading-none" style={{ color: "#18211C" }}>DevisBTP</h1>
-            <p className="text-xs" style={{ color: "#7C857F" }}>Devis professionnel en quelques secondes</p>
-          </div>
+          <button type="button" onClick={() => setActiveView("form")}
+            className="flex items-center gap-3 text-left">
+            <div className="text-white p-2 rounded-xl" style={{ backgroundColor: "#14532D" }}>
+              <HardHat className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-black leading-none" style={{ color: "#18211C" }}>DevisBTP</h1>
+              <p className="text-xs" style={{ color: "#7C857F" }}>Devis professionnel en quelques secondes</p>
+            </div>
+          </button>
           <div className="ml-auto flex items-center gap-3">
             {userEmail && (
               <span className="text-xs hidden sm:block" style={{ color: "#7C857F" }}>
@@ -254,6 +412,22 @@ export default function HomePage() {
                 ? { backgroundColor: "#14532D", color: "#FFFFFF" }
                 : { border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D", backgroundColor: "white" }}>
               <History className="w-3.5 h-3.5" /> Historique
+            </button>
+            <button
+              onClick={() => setActiveView(v => v === "clients" ? "form" : "clients")}
+              className="flex items-center gap-1.5 text-xs rounded-xl px-3 py-2 transition-colors"
+              style={activeView === "clients"
+                ? { backgroundColor: "#14532D", color: "#FFFFFF" }
+                : { border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D", backgroundColor: "white" }}>
+              <Users className="w-3.5 h-3.5" /> Clients
+            </button>
+            <button
+              onClick={() => setActiveView(v => v === "dashboard" ? "form" : "dashboard")}
+              className="flex items-center gap-1.5 text-xs rounded-xl px-3 py-2 transition-colors"
+              style={activeView === "dashboard"
+                ? { backgroundColor: "#14532D", color: "#FFFFFF" }
+                : { border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D", backgroundColor: "white" }}>
+              <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
             </button>
             <button onClick={handleLogout}
               className="flex items-center gap-1.5 text-xs rounded-xl px-3 py-2 bg-white transition-colors"
@@ -269,6 +443,10 @@ export default function HomePage() {
 
         {activeView === "historique" ? (
           <HistoriqueView onOpen={handleOpenFromHistory} />
+        ) : activeView === "clients" ? (
+          <ClientsView onOpenDocument={handleOpenFromHistory} />
+        ) : activeView === "dashboard" ? (
+          <DashboardView />
         ) : result ? (
           <div id="quote-result" className="space-y-4">
             <div className="flex items-start justify-between flex-wrap gap-3">
@@ -342,13 +520,7 @@ export default function HomePage() {
                 </label>
                 {/* Badge statut */}
                 {savedDocumentId && (() => {
-                  const sc: Record<string, { label: string; color: string; bg: string }> = {
-                    brouillon: { label: "Brouillon", color: "#6B7280", bg: "#F3F4F6" },
-                    "envoyé":  { label: "Envoyé",    color: "#1D4ED8", bg: "#DBEAFE" },
-                    "signé":   { label: "Signé",     color: "#7C3AED", bg: "#EDE9FE" },
-                    "payé":    { label: "Payé",      color: "#14532D", bg: "#D1FAE5" },
-                  };
-                  const s = sc[savedDocumentStatut] ?? { label: savedDocumentStatut, color: "#6B7280", bg: "#F3F4F6" };
+                  const s = STATUT_BADGE[savedDocumentStatut] ?? { label: savedDocumentStatut, color: "#6B7280", bg: "#F3F4F6" };
                   return (
                     <span className="text-xs px-2.5 py-1.5 rounded-full font-medium"
                       style={{ color: s.color, backgroundColor: s.bg }}>
@@ -356,13 +528,60 @@ export default function HomePage() {
                     </span>
                   );
                 })()}
-                {/* Marquer envoyé */}
-                {savedDocumentId && savedDocumentStatut === "brouillon" && (
-                  <button onClick={handleMarkEnvoye}
+                {/* Boutons de transition de statut */}
+                {savedDocumentId && (STATUT_TRANSITIONS[savedDocumentStatut] || []).map(t => (
+                  <button key={t.statut} onClick={() => handleChangeStatut(t.statut)}
+                    className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors"
+                    style={{ backgroundColor: t.color, color: "white" }}>
+                    <t.icon className="w-3.5 h-3.5" /> {t.label}
+                  </button>
+                ))}
+                {/* Envoyer par email */}
+                {savedDocumentId && (
+                  <button onClick={() => setShowSendModal(true)}
                     className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors"
                     style={{ backgroundColor: "#1D4ED8", color: "white" }}>
-                    <Send className="w-3.5 h-3.5" /> Marquer envoyé
+                    <Send className="w-3.5 h-3.5" /> Envoyer par email
                   </button>
+                )}
+                {/* Copier le lien de signature — devis envoyé uniquement */}
+                {savedDocumentId && documentType === "devis" && savedDocumentStatut === "envoyé" && (
+                  <button onClick={handleCopySignatureLink} disabled={actionLoading !== null}
+                    className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: "#7C3AED", color: "white" }}>
+                    <Link2 className="w-3.5 h-3.5" />
+                    {actionLoading === "signature-link" ? "Génération…" : linkCopied ? "Lien copié !" : "Copier le lien de signature"}
+                  </button>
+                )}
+                {/* Dupliquer */}
+                {savedDocumentId && (
+                  <button onClick={handleDuplicateDocument} disabled={actionLoading !== null}
+                    className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors bg-white disabled:opacity-50"
+                    style={{ border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D" }}>
+                    <Copy className="w-3.5 h-3.5" /> {actionLoading === "duplicate" ? "Duplication…" : "Dupliquer"}
+                  </button>
+                )}
+                {/* Convertir en facture — devis signé uniquement */}
+                {savedDocumentId && documentType === "devis" && savedDocumentStatut === "signé" && (
+                  <button onClick={handleConvertToFacture} disabled={actionLoading !== null}
+                    className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: "#14532D", color: "white" }}>
+                    <ArrowRightLeft className="w-3.5 h-3.5" /> {actionLoading === "convert" ? "Conversion…" : "Convertir en facture"}
+                  </button>
+                )}
+                {/* Facture d'acompte — devis signé uniquement */}
+                {savedDocumentId && documentType === "devis" && savedDocumentStatut === "signé" && (
+                  <button onClick={handleCreateAcompte} disabled={actionLoading !== null}
+                    className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: "#B45309", color: "white" }}>
+                    <Wallet className="w-3.5 h-3.5" /> {actionLoading === "acompte" ? "Création…" : "Facture d'acompte"}
+                  </button>
+                )}
+                {sendSuccess && (
+                  <span className="text-xs px-2.5 py-1.5 rounded-full font-medium"
+                    style={{ backgroundColor: "#D1FAE5", color: "#065F46" }}>
+                    ✓ Email envoyé
+                  </span>
                 )}
                 {markEnvoyeError && (
                   <span className="text-xs px-2.5 py-1.5 rounded-full font-medium"
@@ -370,8 +589,8 @@ export default function HomePage() {
                     ⚠ {markEnvoyeError}
                   </span>
                 )}
-                <PdfExportButton devis={result} documentType={documentType} withTva={withTva} documentDate={documentDate} filename={filename || undefined} />
-                <WordExportButton devis={result} documentType={documentType} withTva={withTva} documentDate={documentDate} filename={filename || undefined} />
+                <PdfExportButton devis={result} documentType={documentType} withTva={withTva} documentDate={documentDate} filename={filename || undefined} signature={signatureInfo ?? undefined} />
+                <WordExportButton devis={result} documentType={documentType} withTva={withTva} documentDate={documentDate} filename={filename || undefined} signature={signatureInfo ?? undefined} />
 
                 <button onClick={handleReset}
                   className="flex items-center gap-2 text-sm rounded-xl px-4 py-2.5 transition-colors bg-white"
@@ -428,6 +647,16 @@ export default function HomePage() {
           </>
         )}
       </div>
+
+      {showSendModal && result && savedDocumentId && (
+        <SendEmailModal
+          devis={result}
+          documentId={savedDocumentId}
+          documentType={documentType}
+          onClose={() => setShowSendModal(false)}
+          onSent={handleEmailSent}
+        />
+      )}
     </main>
   );
 }

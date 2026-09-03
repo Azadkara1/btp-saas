@@ -1,73 +1,73 @@
 INFO:     Will watch for changes in these directories: ['C:\\Users\\azadk\\Desktop\\btp-saas\\btp-saas\\backend']
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [15344] using WatchFiles
-INFO:     Started server process [10220]
+INFO:     Started reloader process [27960] using WatchFiles
+INFO:     Started server process [34616]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     127.0.0.1:62880 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:62880 - "GET /docs HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59130 - "OPTIONS /quotes/generate HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59130 - "POST /quotes/generate HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58908 - "OPTIONS /pdf/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58908 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
-INFO:     127.0.0.1:58908 - "OPTIONS /word/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58908 - "POST /word/export HTTP/1.1" 200 OK
-WARNING:  WatchFiles detected changes in 'app\services\pdf_service.py'. Reloading...
-INFO:     127.0.0.1:53570 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
-INFO:     127.0.0.1:53570 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
-INFO:     127.0.0.1:53570 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
-INFO:     127.0.0.1:53570 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
-INFO:     127.0.0.1:53570 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
-INFO:     127.0.0.1:53748 - "POST /quotes/generate HTTP/1.1" 200 OK
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [10220]
-INFO:     Started server process [31080]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     127.0.0.1:63031 - "POST /pdf/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58103 - "POST /pdf/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58392 - "POST /pdf/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58305 - "POST /pdf/export HTTP/1.1" 200 OK
-WARNING:  WatchFiles detected changes in 'app\services\pdf_service.py'. Reloading...
-INFO:     127.0.0.1:57184 - "OPTIONS /quotes/generate HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57184 - "POST /quotes/generate HTTP/1.1" 200 OK
-INFO:     Shutting down
-INFO:     Waiting for connections to close. (CTRL+C to force quit)
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [31080]
-WARNING:  WatchFiles detected changes in 'app\services\pdf_service.py'. Reloading...
-Process SpawnProcess-3:
-Traceback (most recent call last):
-  File "C:\Users\azadk\AppData\Local\Python\pythoncore-3.11-64\Lib\multiprocessing\process.py", line 314, in _bootstrap
-    self.run()
-  File "C:\Users\azadk\AppData\Local\Python\pythoncore-3.11-64\Lib\multiprocessing\process.py", line 108, in run
-    self._target(*self._args, **self._kwargs)
-  File "C:\Users\azadk\Desktop\btp-saas\btp-saas\backend\venv\Lib\site-packages\uvicorn\_subprocess.py", line 73, in subprocess_started
-    sys.stdin = os.fdopen(stdin_fileno)
-                ^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen os>", line 1031, in fdopen
-  File "<frozen codecs>", line 309, in __init__
-KeyboardInterrupt
-INFO:     Started server process [12072]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     127.0.0.1:55143 - "OPTIONS /pdf/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55143 - "POST /pdf/export HTTP/1.1" 500 Internal Server Error
-INFO:     127.0.0.1:53745 - "OPTIONS /word/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53745 - "POST /word/export HTTP/1.1" 200 OK
-WARNING:  WatchFiles detected changes in 'app\services\pdf_service.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [12072]
-INFO:     Started server process [32756]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     127.0.0.1:54387 - "POST /pdf/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:60189 - "POST /quotes/generate HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52138 - "OPTIONS /pdf/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52138 - "POST /pdf/export HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55987 - "POST /pdf/export HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54527 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54529 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62605 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "OPTIONS /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "OPTIONS /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "OPTIONS /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "OPTIONS /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "OPTIONS /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "OPTIONS /clients HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "OPTIONS /clients HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /clients HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /clients HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "OPTIONS /dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "OPTIONS /dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /dashboard/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /clients HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /clients HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /clients HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /clients HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60561 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50170 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49186 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49186 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49186 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49227 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49186 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49227 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64480 - "PUT /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64480 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64480 - "OPTIONS /quotes/generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64480 - "POST /quotes/generate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64480 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53226 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53226 - "POST /documents HTTP/1.1" 201 Created
+INFO:     127.0.0.1:50416 - "OPTIONS /documents/1e27380b-0c05-4f2b-898f-83f6c0a2f435/duplicate HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50416 - "POST /documents/1e27380b-0c05-4f2b-898f-83f6c0a2f435/duplicate HTTP/1.1" 201 Created
+INFO:     127.0.0.1:50416 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53766 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53766 - "OPTIONS /documents/f35c2045-85bf-4f18-8e75-ba335affd97b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53766 - "DELETE /documents/f35c2045-85bf-4f18-8e75-ba335affd97b HTTP/1.1" 204 No Content
+INFO:     127.0.0.1:53766 - "OPTIONS /documents/1e27380b-0c05-4f2b-898f-83f6c0a2f435 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53766 - "DELETE /documents/1e27380b-0c05-4f2b-898f-83f6c0a2f435 HTTP/1.1" 204 No Content
+INFO:     127.0.0.1:63426 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59292 - "GET /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63426 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59292 - "GET /profile/numerotation-status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63576 - "OPTIONS /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49745 - "OPTIONS /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49745 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63576 - "GET /documents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63576 - "OPTIONS /documents/6832c487-769f-4a90-8294-3f45f773c31a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63576 - "GET /documents/6832c487-769f-4a90-8294-3f45f773c31a HTTP/1.1" 200 OK

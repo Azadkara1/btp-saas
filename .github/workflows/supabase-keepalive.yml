@@ -1,0 +1,39 @@
+name: Supabase keepalive
+
+# Le plan gratuit Supabase met le projet en pause après ~1 semaine d'inactivité.
+# Symptôme : ERR_NAME_NOT_RESOLVED sur *.supabase.co (le domaine n'existe plus
+# tant que le projet n'est pas manuellement relancé depuis le dashboard).
+# Ce workflow tape une requête légère toutes les 3 jours pour garder le projet actif.
+
+on:
+  schedule:
+    - cron: "0 6 */3 * *"   # tous les 3 jours à 06h00 UTC
+  workflow_dispatch: {}      # déclenchement manuel depuis l'onglet Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${SUPABASE_URL}/rest/v1/entreprises?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+
+          echo "HTTP status: ${http_code}"
+
+          # 200 = OK, 401/403 = requête bloquée par RLS/auth mais a bien atteint
+          # Postgres (le projet est éveillé) → c'est tout ce qui compte ici.
+          case "${http_code}" in
+            200|401|403)
+              echo "Supabase actif (HTTP ${http_code})."
+              ;;
+            *)
+              echo "Échec inattendu (HTTP ${http_code}) — le projet est peut-être en pause."
+              exit 1
+              ;;
+          esac

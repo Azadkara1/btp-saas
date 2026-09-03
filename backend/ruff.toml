@@ -1,0 +1,6 @@
+# Configuration minimale (Batch 12 T2) : uniquement les règles qui attrapent
+# de vraies erreurs — imports inutilisés, variables/noms non définis (F),
+# erreurs de syntaxe (E9). Aucune règle de style : pas question qu'un linter
+# hurle sur 400 lignes de code existant pour des questions de formatage.
+[lint]
+select = ["F", "E9"]

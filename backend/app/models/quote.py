@@ -43,6 +43,7 @@ class ClientInfo(BaseModel):
     adresse: Optional[str] = None
     code_postal: Optional[str] = None
     ville: Optional[str] = None
+    email: Optional[str] = None  # jamais envoyé à Claude — injecté post-génération (Batch 11 T4)
 
 
 class ArtisanInfo(BaseModel):
@@ -57,6 +58,9 @@ class ArtisanInfo(BaseModel):
     logo_base64: Optional[str] = None
     iban: Optional[str] = None
     bic: Optional[str] = None
+    assurance_nom: Optional[str] = None          # mention obligatoire BTP : nom de l'assureur RC Pro / décennale
+    assurance_contrat: Optional[str] = None       # n° de contrat
+    assurance_couverture: Optional[str] = None    # zone géographique couverte
 
 
 class ChantierInfo(BaseModel):
@@ -91,6 +95,10 @@ class Devis(BaseModel):
     modele: Optional[str] = "moderne"     # "moderne" | "pro" — injecté post-génération, jamais envoyé à Claude
     validite_jours: Optional[int] = None  # durée de validité devis (jours) — libre, rien si absent
     conditions_paiement: Optional[str] = None  # ex: "30% à la commande, solde à réception"
+    afficher_signature: bool = True       # affiche l'encadré "Bon pour accord" / "Signature client" — injecté post-génération
+    type_facture: Optional[str] = None    # "acompte" | "solde" | None — libellé d'affichage uniquement (Batch 12 T4-1), n'entre dans aucun calcul
+    retenue_garantie_taux: Optional[float] = None  # % retenu sur le TTC (ex: 5.0) — Loi du 16/07/1971, plafond légal 5% marchés privés (Batch 12 T4-3)
+    autoliquidation: bool = False  # sous-traitance BTP, TVA due par le preneur — art. 283-2 nonies du CGI (Batch 12 T4-5)
 
 
 # ── Prix personnalisés fournis par l'artisan ─────────────────────
@@ -117,6 +125,9 @@ class QuoteRequest(BaseModel):
     artisan_siret: Optional[str] = None
     artisan_iban: Optional[str] = None
     artisan_bic: Optional[str] = None
+    artisan_assurance_nom: Optional[str] = None
+    artisan_assurance_contrat: Optional[str] = None
+    artisan_assurance_couverture: Optional[str] = None
     artisan_adresse: Optional[str] = None
     artisan_code_postal: Optional[str] = None
     artisan_ville: Optional[str] = None
@@ -128,13 +139,17 @@ class QuoteRequest(BaseModel):
     client_adresse: Optional[str] = None
     client_code_postal: Optional[str] = None
     client_ville: Optional[str] = None
+    client_email: Optional[str] = None  # jamais envoyé à Claude — injecté post-génération (Batch 11 T4)
     numero_document: Optional[str] = None
     remise_type: Optional[str] = None
     remise_valeur: Optional[float] = None
     acompte: Optional[float] = None
+    retenue_garantie_taux: Optional[float] = None
+    autoliquidation: bool = False
     modele: Optional[str] = "moderne"
     validite_jours: Optional[int] = None
     conditions_paiement: Optional[str] = None
+    afficher_signature: bool = True
     prix_personnalises: Optional[List[PrixArtisan]] = Field(
         default=None,
         description="Tarifs de l'artisan à utiliser en priorité"

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { FileDown, Loader2 } from "lucide-react";
-import { exportToWord } from "@/lib/api";
+import { exportToWord, SignatureExportOptions } from "@/lib/api";
 import { Devis } from "@/lib/types";
 
 interface WordExportButtonProps {
@@ -10,9 +10,10 @@ interface WordExportButtonProps {
   withTva: boolean;
   documentDate: string;
   filename?: string;
+  signature?: SignatureExportOptions;
 }
 
-export default function WordExportButton({ devis, documentType, withTva, documentDate, filename }: WordExportButtonProps) {
+export default function WordExportButton({ devis, documentType, withTva, documentDate, filename, signature }: WordExportButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +21,7 @@ export default function WordExportButton({ devis, documentType, withTva, documen
     setLoading(true);
     setError(null);
     try {
-      await exportToWord(devis, documentType, withTva, documentDate, filename);
+      await exportToWord(devis, documentType, withTva, documentDate, filename, signature);
     } catch {
       setError("Erreur lors de la génération Word.");
     } finally {
