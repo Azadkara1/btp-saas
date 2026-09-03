@@ -119,6 +119,10 @@ export default function HomePage() {
   // Signature capturée (Batch 12 T3) — métadonnée du document, pas du devis
   // lui-même (jamais dans `result`/`Devis`). Alimente PdfExportButton/WordExportButton.
   const [signatureInfo, setSignatureInfo] = useState<{ nom?: string | null; imageBase64?: string | null; date?: string | null } | null>(null);
+  // Batch 15 : suit si numero_document est encore le numéro provisoire
+  // auto-rempli par nous (jamais modifié à la main) — seul cas où la
+  // bascule Devis/Facture est autorisée à le recalculer automatiquement.
+  const [numeroDocumentAuto, setNumeroDocumentAuto] = useState(false);
   const [saveFeedback, setSaveFeedback]             = useState<"saving" | "saved" | "error" | null>(null);
   const [markEnvoyeError, setMarkEnvoyeError]       = useState<string | null>(null);
   const [actionLoading, setActionLoading]           = useState<"convert" | "duplicate" | "signature-link" | "acompte" | null>(null);
@@ -188,6 +192,9 @@ export default function HomePage() {
       if (!devis.numero_document) {
         const provisoire = await computeProvisionalNumero(documentType);
         if (provisoire) devis = { ...devis, numero_document: provisoire };
+        setNumeroDocumentAuto(!!provisoire);
+      } else {
+        setNumeroDocumentAuto(false);
       }
       setResult(devis);
       setTokensUsed(response.tokens_used || null);
@@ -241,6 +248,9 @@ export default function HomePage() {
     if (!finalDevis.numero_document) {
       const provisoire = await computeProvisionalNumero(documentType);
       if (provisoire) finalDevis = { ...finalDevis, numero_document: provisoire };
+      setNumeroDocumentAuto(!!provisoire);
+    } else {
+      setNumeroDocumentAuto(false);
     }
     setResult(finalDevis);
     setImportedResponse(null);
@@ -252,6 +262,28 @@ export default function HomePage() {
     setTimeout(() => {
       document.getElementById("quote-result")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
+  };
+
+  // Batch 15 : bascule Devis ↔ Facture sur un document déjà généré — le
+  // numéro provisoire doit suivre (préfixe DEV-/FAC- + compteur du bon
+  // type), mais UNIQUEMENT s'il n'a jamais été retouché à la main.
+  const handleDocumentTypeChange = async (newType: DocumentType) => {
+    setDocumentType(newType);
+    if (numeroDocumentAuto && result) {
+      const provisoire = await computeProvisionalNumero(newType);
+      if (provisoire) {
+        setResult(prev => prev ? { ...prev, numero_document: provisoire } : prev);
+      }
+    }
+  };
+
+  // Détecte une édition manuelle du numéro dans QuotePreview (le seul champ
+  // qu'on ne doit plus jamais recalculer automatiquement après ça).
+  const handleQuotePreviewUpdate = (updated: Devis) => {
+    if (numeroDocumentAuto && result && updated.numero_document !== result.numero_document) {
+      setNumeroDocumentAuto(false);
+    }
+    setResult(updated);
   };
 
   const handleReset = () => {
@@ -266,6 +298,7 @@ export default function HomePage() {
     setSavedDocumentId(null);
     setSavedDocumentStatut("brouillon");
     setSignatureInfo(null);
+    setNumeroDocumentAuto(false);
     setSaveFeedback(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -278,6 +311,7 @@ export default function HomePage() {
       setSavedDocumentStatut(nextStatut);
       if (r.numero && result) {
         setResult({ ...result, numero_document: r.numero });
+        setNumeroDocumentAuto(false); // numéro légal définitif attribué — plus jamais recalculé
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -291,6 +325,7 @@ export default function HomePage() {
     setSavedDocumentId(detail.id);
     setSavedDocumentStatut(detail.statut);
     setDocumentType(detail.type_doc === "facture" ? "facture" : "devis");
+    setNumeroDocumentAuto(false); // numéro déjà attribué/sauvegardé — jamais recalculé automatiquement
     setResult(detail.devis_payload);
     setSignatureInfo(
       detail.signature_nom_signataire
@@ -475,7 +510,7 @@ export default function HomePage() {
               </div>
 
               <div className="flex gap-2 flex-wrap items-center">
-                <DocTypeToggle value={documentType} onChange={setDocumentType} size="sm" />
+                <DocTypeToggle value={documentType} onChange={handleDocumentTypeChange} size="sm" />
 
                 {/* Date du document */}
                 <label className="flex items-center gap-1.5 rounded-xl px-3 py-2 bg-white text-sm cursor-pointer"
@@ -605,7 +640,7 @@ export default function HomePage() {
               documentType={documentType}
               withTva={withTva}
               documentDate={documentDate}
-              onUpdate={updated => setResult(updated)}
+              onUpdate={handleQuotePreviewUpdate}
             />
           </div>
         ) : importedResponse ? (

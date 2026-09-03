@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, Fragment, useRef } from "react";
+import { useState, useMemo, useEffect, Fragment, useRef } from "react";
 import { Pencil, Plus, Trash2, RotateCcw } from "lucide-react";
 import { Devis, LigneDevis, TotauxDevis } from "@/lib/types";
 import ModelPicker from "@/components/ModelPicker";
@@ -252,6 +252,15 @@ export default function QuotePreview({ devis, documentType, withTva, documentDat
 
   // T1+T2 : état local pour les champs éditables post-génération
   const [localNumeroDoc, setLocalNumeroDoc]                 = useState<string>(devis.numero_document || "");
+
+  // Batch 15 : resynchronise l'affichage quand numero_document change depuis
+  // l'EXTÉRIEUR du composant (ex. bascule Devis/Facture dans page.tsx qui
+  // recalcule le numéro provisoire) — sans ça, l'input restait figé sur
+  // l'ancienne valeur car localNumeroDoc n'était initialisé qu'au montage.
+  useEffect(() => {
+    setLocalNumeroDoc(devis.numero_document || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devis.numero_document]);
   const [localValiditeJours, setLocalValiditeJours]         = useState<number | null>(devis.validite_jours ?? null);
   const [localConditionsPaiement, setLocalConditionsPaiement] = useState<string>(devis.conditions_paiement || "");
   const [localMentions, setLocalMentions]                   = useState<string[]>([...devis.mentions_legales]);
