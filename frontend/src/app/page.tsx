@@ -389,7 +389,7 @@ export default function HomePage() {
       {/* Header */}
       <header className="bg-white sticky top-0 z-10" style={{ borderBottom: "0.5px solid rgba(20,83,45,0.12)" }}>
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
-          <button type="button" onClick={() => setActiveView("form")}
+          <button type="button" onClick={() => { handleReset(); setActiveView("form"); }}
             className="flex items-center gap-3 text-left">
             <div className="text-white p-2 rounded-xl" style={{ backgroundColor: "#14532D" }}>
               <HardHat className="w-5 h-5" />

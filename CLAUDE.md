@@ -70,6 +70,56 @@ pytest
 
 ---
 
+## Déploiement (Render + Vercel)
+
+Backend → **Render**. Frontend → **Vercel**.
+
+> ⚠️ **Toute fonctionnalité qui lit une nouvelle variable d'environnement doit être ajoutée
+> ici ET dans le dashboard concerné, dans le même batch.** C'est la cause n°1 des pannes de
+> production sur ce projet (3 incidents : crash du middleware Vercel, 401 généralisés,
+> lien de signature pointant vers `localhost` en prod — `FRONTEND_URL` oubliée sur Render).
+> Vérifier cette section fait partie de la définition de « terminé » pour toute feature.
+> ⚠️ Piège aggravant : la plupart de ces variables ont un défaut silencieux dans `config.py`
+> (`frontend_url`, `supabase_url`, etc.) — leur absence ne fait PAS planter le démarrage,
+> elle casse juste une fonctionnalité précise, découverte bien plus tard par un utilisateur.
+
+### Variables Render (backend)
+
+| Variable | Où la récupérer | Note |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | console Anthropic | — |
+| `PYTHON_VERSION` | — | 3.11 |
+| `ALLOWED_ORIGIN` | URL Vercel de production | Pas `localhost:3000` en prod, sinon erreur CORS |
+| `FRONTEND_URL` | URL Vercel de production | Sert à construire les liens publics envoyés au client (ex. lien de signature `/devis/{token}`) — défaut `http://localhost:3000` si absente, donc **silencieux** : le lien généré en prod pointe vers un poste local si on l'oublie. Incident réel : Batch 15. |
+| `SUPABASE_URL` | Supabase → Project Settings → Data API → *Project URL* | **Doit être identique** à `NEXT_PUBLIC_SUPABASE_URL` côté Vercel |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API Keys (`service_role` / `sb_secret_*`) | Jamais côté frontend, jamais dans git |
+| `RESEND_API_KEY` | dashboard Resend | Jamais côté frontend |
+| `EMAIL_FROM` | — | Format `DevisBTP <noreply@domaine.fr>` — à ajouter lors de l'activation de l'envoi d'emails |
+| `EMAIL_ENABLED` | — | Idem |
+
+### Variables Vercel (frontend)
+
+| Variable | Où la récupérer |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | URL du service Render, **sans slash final** |
+| `NEXT_PUBLIC_SUPABASE_URL` | même valeur que `SUPABASE_URL` côté Render |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → API Keys (`sb_publishable_*`) |
+
+### Règles de configuration
+
+- **Aucune variable `NEXT_PUBLIC_*` ne doit être marquée « Sensitive » / « Secret » sur
+  Vercel.** Elles sont inlinées dans le bundle envoyé au navigateur, donc publiques par
+  nature. Le type secret les rend illisibles au build → valeur vide, sans erreur explicite.
+- **Les `NEXT_PUBLIC_*` sont gravées dans le bundle au moment du build** → toute
+  modification exige un **redéploiement**. Changer la valeur sans rebuild ne change rien.
+- **Une même variable se coche sur plusieurs environnements** (Production + Preview), on ne
+  duplique pas l'entrée — sauf si la valeur doit réellement différer (ex. un backend de test
+  distinct par environnement).
+- Render redémarre le service automatiquement après un changement de variable (vérifier
+  l'onglet *Events*) ; Vercel non.
+
+---
+
 ## Architecture backend
 
 ```
@@ -400,6 +450,8 @@ frontend/src/
 | **Mentions TVA (293 B / taux réduit / autoliquidation) sont mutuellement exclusives** | Calculées à l'affichage dans `pdf_service.py`/`word_service.py` à partir de `with_tva`, `devis.autoliquidation` et `devis.lignes[].tva_taux` — jamais stockées, jamais éditables. `autoliquidation=True` supprime automatiquement les deux autres. Ne jamais les faire cohabiter : ce sont des régimes fiscaux différents. |
 | **Pause Supabase (plan gratuit)** | Un projet Supabase gratuit se met en pause après ~1 semaine d'inactivité. **Symptôme : `ERR_NAME_NOT_RESOLVED`** sur `*.supabase.co` (pas une erreur HTTP — facile à confondre avec un problème réseau local). Mitigé par `.github/workflows/supabase-keepalive.yml` (ping tous les 3 jours). |
 | **Numérotation : formatage/atomicité toujours en SQL, jamais en Python** | `get_next_numero` (Postgres) reste la SEULE source de vérité pour un numéro légal — formatage (préfixe/année/padding) et incrément dans la même fonction, même `UPDATE...RETURNING`. `numero_service.py::format_numero()`/`compute_next_compteur()` sont des fonctions Python **pures qui dupliquent volontairement cette logique**, mais UNIQUEMENT pour `preview_next_compteur()` (aperçu UI en lecture seule, jamais d'écriture) — un écart entre les deux ne peut jamais produire un doublon de numéro, juste un aperçu temporairement imprécis. Si la règle de reset ou le format changent un jour, mettre à jour les DEUX (SQL et Python) — ce n'est pas automatique. |
+| **401 généralisé en production ≠ problème de connexion utilisateur** | `auth.py` renvoie **403 si le header est absent, 401 si le token est invalide/expiré**. Un 401 signifie donc que le frontend envoie bien un token mais que le backend le refuse. Cause déjà rencontrée : `SUPABASE_URL` absente sur Render → `supabase_jwks_url` (dérivée) ne pointe nulle part → aucune signature vérifiable. Le service démarre normalement et répond `200` sur `/health`, seule l'authentification échoue — d'où la confusion avec un bug applicatif. Toujours vérifier les variables Render avant de chercher plus loin. |
+| **Déploiements Preview Vercel → erreurs CORS attendues** | Les déploiements de branche ont une URL différente à chaque commit, jamais couverte par l'`ALLOWED_ORIGIN` de Render (qui pointe sur l'URL de production). Un Preview refusera donc les appels API : c'est **le comportement normal**, pas un bug à corriger. Le développement se fait en local, seule la production compte. Si un jour les Previews doivent réellement fonctionner, il faudra une regex d'origine côté backend plutôt qu'une valeur fixe — ne pas ouvrir le CORS en wildcard pour contourner le symptôme. |
 | **`devis_numero_debut`/`facture_numero_debut` verrouillés après le premier numéro attribué** | `PUT /profile` (`routers/profile.py::_numero_debut_locked`) vérifie côté backend — pas seulement dans le formulaire — si un document de ce type a déjà un `numero` non `NULL` avant d'accepter un changement de point de départ (409 sinon). Les 3 autres champs par type (préfixe, année, padding) restent librement modifiables. Le reset annuel (`numero_reset_annuel`, partagé devis/facture) n'est jamais verrouillé, seul le point de départ l'est. |
 
 ---
@@ -413,7 +465,7 @@ frontend/src/
 - **UX mobile-first** — l'artisan utilise son téléphone sur le chantier
 - **Les infos sensibles ne passent jamais par Claude** — injectées dans `claude_service.py` après génération. Le champ `modele` suit la même règle.
 - **Nouvelles dépendances Python** → ajouter dans `requirements.txt` ET installer dans le venv
-- **Variables d'env en production** → ne jamais les coder en dur ; les définir dans le dashboard Render (backend) ou Vercel (frontend)
+- **Variables d'env en production** → ne jamais les coder en dur ; les définir dans le dashboard Render (backend) ou Vercel (frontend). **Toute nouvelle variable doit être ajoutée à la section « Déploiement » de ce fichier dans le même batch que le code qui la lit** — une feature n'est pas terminée tant que ce n'est pas fait.
 - **`SUPABASE_SERVICE_ROLE_KEY`** → jamais côté frontend, jamais dans git (appels admin Supabase depuis le backend)
 - **`RESEND_API_KEY`** → jamais côté frontend, jamais dans git (`backend/.env` en local, dashboard Render en production). Sans elle, `POST /documents/{id}/send` répond une erreur claire plutôt que de planter au démarrage.
 - **`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`** (`sb_publishable_*`) → sûre côté frontend, protégée par RLS
