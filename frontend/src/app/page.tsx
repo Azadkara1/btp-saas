@@ -423,52 +423,55 @@ export default function HomePage() {
     <main className="min-h-screen" style={{ backgroundColor: "#FAFAF7" }}>
       {/* Header */}
       <header className="bg-white sticky top-0 z-10" style={{ borderBottom: "0.5px solid rgba(20,83,45,0.12)" }}>
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex items-center gap-2 sm:gap-3">
           <button type="button" onClick={() => { handleReset(); setActiveView("form"); }}
-            className="flex items-center gap-3 text-left">
-            <div className="text-white p-2 rounded-xl" style={{ backgroundColor: "#14532D" }}>
-              <HardHat className="w-5 h-5" />
+            className="flex items-center gap-2 sm:gap-3 text-left shrink-0">
+            <div className="text-white p-1.5 sm:p-2 rounded-xl shrink-0" style={{ backgroundColor: "#14532D" }}>
+              <HardHat className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h1 className="text-lg font-black leading-none" style={{ color: "#18211C" }}>DevisBTP</h1>
-              <p className="text-xs" style={{ color: "#7C857F" }}>Devis professionnel en quelques secondes</p>
+              <h1 className="text-base sm:text-lg font-black leading-none" style={{ color: "#18211C" }}>DevisBTP</h1>
+              <p className="hidden sm:block text-xs" style={{ color: "#7C857F" }}>Devis professionnel en quelques secondes</p>
             </div>
           </button>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-1 sm:gap-3 overflow-x-auto">
             {userEmail && (
-              <span className="text-xs hidden sm:block" style={{ color: "#7C857F" }}>
+              <span className="text-xs hidden md:block shrink-0" style={{ color: "#7C857F" }}>
                 {userEmail}
               </span>
             )}
             <button
               onClick={() => setActiveView(v => v === "historique" ? "form" : "historique")}
-              className="flex items-center gap-1.5 text-xs rounded-xl px-3 py-2 transition-colors"
+              title="Historique"
+              className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "historique"
                 ? { backgroundColor: "#14532D", color: "#FFFFFF" }
                 : { border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D", backgroundColor: "white" }}>
-              <History className="w-3.5 h-3.5" /> Historique
+              <History className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Historique</span>
             </button>
             <button
               onClick={() => setActiveView(v => v === "clients" ? "form" : "clients")}
-              className="flex items-center gap-1.5 text-xs rounded-xl px-3 py-2 transition-colors"
+              title="Clients"
+              className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "clients"
                 ? { backgroundColor: "#14532D", color: "#FFFFFF" }
                 : { border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D", backgroundColor: "white" }}>
-              <Users className="w-3.5 h-3.5" /> Clients
+              <Users className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Clients</span>
             </button>
             <button
               onClick={() => setActiveView(v => v === "dashboard" ? "form" : "dashboard")}
-              className="flex items-center gap-1.5 text-xs rounded-xl px-3 py-2 transition-colors"
+              title="Dashboard"
+              className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "dashboard"
                 ? { backgroundColor: "#14532D", color: "#FFFFFF" }
                 : { border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D", backgroundColor: "white" }}>
-              <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
+              <LayoutDashboard className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Dashboard</span>
             </button>
             <button onClick={handleLogout}
-              className="flex items-center gap-1.5 text-xs rounded-xl px-3 py-2 bg-white transition-colors"
-              style={{ border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D" }}
-              title="Se déconnecter">
-              <LogOut className="w-3.5 h-3.5" /> Déconnexion
+              title="Se déconnecter"
+              className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 bg-white transition-colors shrink-0"
+              style={{ border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D" }}>
+              <LogOut className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Déconnexion</span>
             </button>
           </div>
         </div>

@@ -30,3 +30,27 @@ Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
  ✓ Compiled in 801ms (1705 modules)
  ⚠ Unsupported metadata viewport is configured in metadata export in /. Please move it to viewport export instead.
 Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+ ○ Compiling /devis/[token] ...
+ ✓ Compiled /devis/[token] in 3.2s (1717 modules)
+ ✓ Compiled in 940ms (867 modules)
+ ⚠ Unsupported metadata viewport is configured in metadata export in /. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+ ⚠ Unsupported metadata viewport is configured in metadata export in /. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+ ⚠ Unsupported metadata viewport is configured in metadata export in /devis/PoDpVYZQMeGj1OM8qF096r34dZz51aUKOjwSwgjTLfs. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+ GET /devis/PoDpVYZQMeGj1OM8qF096r34dZz51aUKOjwSwgjTLfs 200 in 4904ms
+ ✓ Compiled in 1186ms (1717 modules)
+ ⚠ Unsupported metadata viewport is configured in metadata export in /. Please move it to viewport export instead.
+Read more: https://nextjs.org/docs/app/api-reference/functions/generate-viewport
+ ✓ Compiled in 3.2s (1717 modules)
+ ✓ Compiled in 858ms (1717 modules)
+ ✓ Compiled in 612ms (1717 modules)
+ ✓ Compiled in 589ms (1717 modules)
+ ✓ Compiled in 621ms (1717 modules)
+ ✓ Compiled in 519ms (1717 modules)
+ ✓ Compiled in 419ms (1717 modules)
+ ✓ Compiled in 418ms (1717 modules)
+ ✓ Compiled in 506ms (1717 modules)
+ ✓ Compiled in 480ms (1717 modules)
+ ✓ Compiled in 690ms (1717 modules)
