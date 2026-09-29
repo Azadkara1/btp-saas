@@ -31,6 +31,14 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
       - name: Tests (pytest)
+        env:
+          # Valeurs factices : jamais utilisées pour un vrai appel réseau dans
+          # les tests, mais requises pour l'import de claude_service.py, qui
+          # instancie le client Anthropic (donc appelle get_settings()) au
+          # niveau module. Sans ça, Settings() lève une ValidationError dès
+          # que pytest collecte un test qui importe ce module (Batch 17).
+          ANTHROPIC_API_KEY: "test-key-ci"
+          SUPABASE_SERVICE_ROLE_KEY: "test-key-ci"
         run: pytest
 
   frontend:
