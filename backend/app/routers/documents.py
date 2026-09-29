@@ -10,7 +10,7 @@ PATCH  /documents/{id}             → mise à jour statut ; brouillon→envoyé
                                       — vérifie la transition (Batch 16, cf. _TRANSITIONS_AUTORISEES)
 POST   /documents/{id}/convert     → duplique un devis signé en facture brouillon (filiation)
 POST   /documents/{id}/duplicate   → duplique un document à l'identique (même type_doc)
-POST   /documents/{id}/create-acompte → génère une facture d'acompte à partir d'un devis signé
+POST   /documents/{id}/create-acompte → génère une facture d'acompte à partir d'un devis (tout statut)
 DELETE /documents/{id}             → soft delete (deleted_at) ; refuse si statut hors brouillon/refusé
 POST   /documents/{id}/send        → génère le PDF, l'archive, l'envoie par email, transition → envoyé
 GET    /documents/{id}/signature-link → génère (si absent) et renvoie le lien public de signature
@@ -534,8 +534,6 @@ def create_acompte(
     source = _fetch_source_document(db, doc_id, uid)
     if source["type_doc"] != "devis":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seul un devis peut générer une facture d'acompte")
-    if source["statut"] != "signé":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Le devis doit être signé avant de générer une facture d'acompte")
 
     devis = Devis(**source["devis_payload"])
     acompte_devis = _build_acompte_devis(devis, body.pourcentage, source.get("numero"))

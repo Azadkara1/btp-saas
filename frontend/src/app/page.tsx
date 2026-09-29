@@ -178,22 +178,48 @@ export default function HomePage() {
   // (édition de lignes, remise, mentions, client...). Avant ça, seul l'état
   // généré au départ était jamais sauvegardé — un devis modifié puis rouvert
   // depuis l'historique perdait silencieusement toutes ses modifications.
-  // Débounce : évite un appel réseau à chaque frappe.
+  // Débounce : évite un appel réseau à chaque frappe. La modification en
+  // attente est gardée dans pendingUpdateRef (pas seulement dans le timer)
+  // pour pouvoir être déclenchée immédiatement via flushUpdateSave() —
+  // sinon quitter l'aperçu (historique/clients) juste après une frappe
+  // pouvait rouvrir le document avant l'écoulement des 900ms et afficher
+  // la version non modifiée.
   const updateSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingUpdateRef = useRef<{ id: string; devis: Devis; docType: DocumentType; date: string } | null>(null);
+
+  const persistUpdate = async (id: string, devis: Devis, docType: DocumentType, date: string) => {
+    setSaveFeedback("saving");
+    try {
+      await updateDocument(id, buildDocumentPayload(devis, docType, date));
+      setSaveFeedback("saved");
+      setTimeout(() => setSaveFeedback(null), 3000);
+    } catch {
+      setSaveFeedback("error");
+      setTimeout(() => setSaveFeedback(null), 3000);
+    } finally {
+      pendingUpdateRef.current = null;
+    }
+  };
 
   const doUpdateSave = (id: string, devis: Devis, docType: DocumentType, date: string) => {
     if (updateSaveTimer.current) clearTimeout(updateSaveTimer.current);
-    updateSaveTimer.current = setTimeout(async () => {
-      setSaveFeedback("saving");
-      try {
-        await updateDocument(id, buildDocumentPayload(devis, docType, date));
-        setSaveFeedback("saved");
-        setTimeout(() => setSaveFeedback(null), 3000);
-      } catch {
-        setSaveFeedback("error");
-        setTimeout(() => setSaveFeedback(null), 3000);
-      }
+    pendingUpdateRef.current = { id, devis, docType, date };
+    updateSaveTimer.current = setTimeout(() => {
+      updateSaveTimer.current = null;
+      const pending = pendingUpdateRef.current;
+      if (pending) persistUpdate(pending.id, pending.devis, pending.docType, pending.date);
     }, 900);
+  };
+
+  // Déclenche immédiatement une sauvegarde en attente (sans attendre le
+  // débounce) — appelé avant toute navigation qui quitte l'aperçu.
+  const flushUpdateSave = () => {
+    if (updateSaveTimer.current) {
+      clearTimeout(updateSaveTimer.current);
+      updateSaveTimer.current = null;
+    }
+    const pending = pendingUpdateRef.current;
+    if (pending) persistUpdate(pending.id, pending.devis, pending.docType, pending.date);
   };
 
   // Batch 14 : numéro provisoire dès la génération, calculé avec le même
@@ -333,6 +359,7 @@ export default function HomePage() {
   };
 
   const handleReset = () => {
+    flushUpdateSave();
     setResult(null);
     setImportedResponse(null);
     setImportArtisanChoice("keep");
@@ -494,7 +521,7 @@ export default function HomePage() {
               </span>
             )}
             <button
-              onClick={() => setActiveView(v => v === "historique" ? "form" : "historique")}
+              onClick={() => { flushUpdateSave(); setActiveView(v => v === "historique" ? "form" : "historique"); }}
               title="Historique"
               className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "historique"
@@ -503,7 +530,7 @@ export default function HomePage() {
               <History className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Historique</span>
             </button>
             <button
-              onClick={() => setActiveView(v => v === "clients" ? "form" : "clients")}
+              onClick={() => { flushUpdateSave(); setActiveView(v => v === "clients" ? "form" : "clients"); }}
               title="Clients"
               className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "clients"
@@ -512,7 +539,7 @@ export default function HomePage() {
               <Users className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Clients</span>
             </button>
             <button
-              onClick={() => setActiveView(v => v === "dashboard" ? "form" : "dashboard")}
+              onClick={() => { flushUpdateSave(); setActiveView(v => v === "dashboard" ? "form" : "dashboard"); }}
               title="Dashboard"
               className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "dashboard"
@@ -661,8 +688,8 @@ export default function HomePage() {
                     <ArrowRightLeft className="w-3.5 h-3.5" /> {actionLoading === "convert" ? "Conversion…" : "Convertir en facture"}
                   </button>
                 )}
-                {/* Facture d'acompte — devis signé uniquement */}
-                {savedDocumentId && documentType === "devis" && savedDocumentStatut === "signé" && (
+                {/* Facture d'acompte — depuis un devis, quel que soit son statut */}
+                {savedDocumentId && documentType === "devis" && (
                   <button onClick={handleCreateAcompte} disabled={actionLoading !== null}
                     className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors disabled:opacity-50"
                     style={{ backgroundColor: "#B45309", color: "white" }}>
