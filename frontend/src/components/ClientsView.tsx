@@ -139,7 +139,7 @@ export default function ClientsView({ onOpenDocument }: ClientsViewProps) {
         ) : (
           <>
             <div className="card space-y-3">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <h2 className="text-xl font-bold" style={{ color: "#18211C" }}>{detail.nom}</h2>
                 {!editing ? (
                   <button onClick={() => setEditing(true)}

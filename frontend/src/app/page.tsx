@@ -135,7 +135,7 @@ export default function HomePage() {
   const [documentInstanceKey, setDocumentInstanceKey] = useState(0);
   const [saveFeedback, setSaveFeedback]             = useState<"saving" | "saved" | "error" | null>(null);
   const [markEnvoyeError, setMarkEnvoyeError]       = useState<string | null>(null);
-  const [actionLoading, setActionLoading]           = useState<"convert" | "duplicate" | "signature-link" | "acompte" | null>(null);
+  const [actionLoading, setActionLoading]           = useState<"convert" | "duplicate" | "signature-link" | "acompte" | "statut" | null>(null);
   const [linkCopied, setLinkCopied]                 = useState(false);
   const [showSendModal, setShowSendModal]           = useState(false);
   const [sendSuccess, setSendSuccess]               = useState(false);
@@ -350,8 +350,9 @@ export default function HomePage() {
   };
 
   const handleChangeStatut = async (nextStatut: StatutDocument) => {
-    if (!savedDocumentId) return;
+    if (!savedDocumentId || actionLoading !== null) return;
     setMarkEnvoyeError(null);
+    setActionLoading("statut");
     // Une sauvegarde de contenu en attente (debounce) viserait un document
     // qui ne sera plus un brouillon après cette transition → 409 inutile.
     if (updateSaveTimer.current) clearTimeout(updateSaveTimer.current);
@@ -367,6 +368,8 @@ export default function HomePage() {
       console.error(`[STATUT → ${nextStatut}] échec — savedDocumentId:`, savedDocumentId, "erreur:", msg);
       setMarkEnvoyeError(msg);
       setTimeout(() => setMarkEnvoyeError(null), 8000);
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -619,9 +622,10 @@ export default function HomePage() {
                 {/* Boutons de transition de statut */}
                 {savedDocumentId && (STATUT_TRANSITIONS[savedDocumentStatut] || []).map(t => (
                   <button key={t.statut} onClick={() => handleChangeStatut(t.statut)}
-                    className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors"
+                    disabled={actionLoading !== null}
+                    className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors disabled:opacity-50"
                     style={{ backgroundColor: t.color, color: "white" }}>
-                    <t.icon className="w-3.5 h-3.5" /> {t.label}
+                    <t.icon className="w-3.5 h-3.5" /> {actionLoading === "statut" ? "…" : t.label}
                   </button>
                 ))}
                 {/* Envoyer par email */}

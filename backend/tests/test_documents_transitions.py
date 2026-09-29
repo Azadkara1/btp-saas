@@ -272,3 +272,16 @@ def test_convert_to_facture_leve_erreur_explicite_si_recherche_acompte_echoue(mo
     with pytest.raises(HTTPException) as exc:
         documents_router.convert_to_facture("doc-1", current_user=_FakeCurrentUser("user-1"))
     assert exc.value.status_code == 500
+
+
+def test_convert_to_facture_refuse_un_devis_non_signe(monkeypatch):
+    """Le frontend ne montre le bouton que sur un devis signé — le backend
+    doit refuser un contournement direct de l'API (cf. docstring du module,
+    et cohérence avec create-acompte qui impose la même règle)."""
+    doc_row = _make_full_doc_row(type_doc="devis", statut="brouillon")
+    fake = FakeSupabaseClient(documents=[doc_row])
+    monkeypatch.setattr(documents_router, "get_supabase_admin", lambda: fake)
+
+    with pytest.raises(HTTPException) as exc:
+        documents_router.convert_to_facture("doc-1", current_user=_FakeCurrentUser("user-1"))
+    assert exc.value.status_code == 409

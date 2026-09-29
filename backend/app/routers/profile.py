@@ -7,6 +7,8 @@ GET  /profile/numerotation-status → verrouillage + aperçu du prochain numéro
 
 ⚠️  Client service_role : filtrage user_id obligatoire sur chaque requête.
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
@@ -15,6 +17,7 @@ from app.core.supabase_client import get_supabase_admin
 from app.models.profile import ProfileEntreprise
 from app.services.numero_service import preview_next_compteur
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Champs gérés par ProfileEntreprise (exclut id, user_id, created_at, compteurs)
@@ -39,7 +42,8 @@ def get_profile(current_user: CurrentUser = Depends(get_current_user)):
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profil introuvable")
@@ -103,7 +107,8 @@ def put_profile(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     return profile
 
@@ -134,4 +139,5 @@ def get_numerotation_status(current_user: CurrentUser = Depends(get_current_user
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")

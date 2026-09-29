@@ -149,7 +149,8 @@ def accept_devis(token: str, body: AcceptSignatureRequest, request: Request):
     try:
         db.table("documents").update(update_data).eq("id", doc["id"]).execute()
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     logger.info("[SIGNATURE] devis %s signé par %r", doc["id"], nom)
 
@@ -213,7 +214,8 @@ def refuse_devis(token: str):
     try:
         db.table("documents").update(update_data).eq("id", doc["id"]).execute()
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     logger.info("[SIGNATURE] devis %s refusé", doc["id"])
     return PublicActionResponse(statut="refusé")

@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import HTTPException, status
 
 from app.core.supabase_client import get_supabase_admin
+
+logger = logging.getLogger(__name__)
 
 
 def get_next_numero(user_id: str, type_doc: str) -> str:
@@ -19,9 +22,10 @@ def get_next_numero(user_id: str, type_doc: str) -> str:
             .execute()
         )
     except Exception as exc:
+        logger.error("Erreur RPC get_next_numero (user_id=%s, type=%s) : %s", user_id, type_doc, exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erreur numérotation : {exc}",
+            detail="Erreur lors de l'attribution du numéro. Réessayez ou contactez le support.",
         )
 
     data = result.data
@@ -118,7 +122,8 @@ def preview_next_compteur(user_id: str, type_doc: str) -> int:
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profil introuvable")

@@ -26,9 +26,21 @@ ALTER TABLE entreprises
 -- — pas besoin d'index partiel. Filet de sécurité : deux documents avec le
 -- même numéro deviennent une erreur SQL visible, pas une découverte lors
 -- d'un contrôle fiscal.
+--
+-- PostgreSQL ne supporte pas "ADD CONSTRAINT IF NOT EXISTS" (contrairement
+-- aux ADD COLUMN ci-dessus) — sans ce bloc, rejouer cette migration sur une
+-- base où elle a déjà tourné échoue avec "constraint already exists"
+-- (trouvé par revue de code, Batch 16).
 
-ALTER TABLE documents
-  ADD CONSTRAINT documents_numero_unique UNIQUE (user_id, type_doc, numero);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'documents_numero_unique'
+  ) THEN
+    ALTER TABLE documents
+      ADD CONSTRAINT documents_numero_unique UNIQUE (user_id, type_doc, numero);
+  END IF;
+END $$;
 
 -- ── 3. Remplacement de get_next_numero — formatage dans la fonction,  ─────
 --       toujours un seul UPDATE ... RETURNING (atomicité, piège #4)

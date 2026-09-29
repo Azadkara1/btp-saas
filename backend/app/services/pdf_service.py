@@ -411,6 +411,14 @@ def generate_quote_pdf(
     for lot_name, lot_lignes in lot_groups.items():
         n_lot = len(lot_lignes)
 
+        # Batch 16 : la police active peut avoir été laissée en Bold par le
+        # sous-total du lot précédent (dernier pdf.set_font de la boucle
+        # d'avant) — _row_height() mesurerait alors le texte du prochain lot
+        # avec la mauvaise police, surestimant lot_total_h et déclenchant un
+        # saut de page un peu trop tôt. Jamais de perte de contenu (le dessin
+        # réel reset déjà la police), juste une pagination trop pessimiste.
+        pdf.set_font(FONT, "", 8)
+
         # ── T1 : LOT = bloc insécable ────────────────────────────────────
         # Calculer la hauteur totale du lot avant de le dessiner.
         band_h_lot  = 7 if (has_lots and lot_name) else 0

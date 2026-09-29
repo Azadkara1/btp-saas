@@ -106,7 +106,8 @@ def _upsert_client(db, uid: str, body: DocumentCreate) -> str | None:
         }).execute()
         return ins.data[0]["id"]
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
 
 # ── POST /documents ─────────────────────────────────────────────────────────
@@ -134,7 +135,8 @@ def create_document(
             "statut": "brouillon",
         }).execute()
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     row = ins.data[0]
     return _row_to_detail(row, body.client_nom)
@@ -168,7 +170,8 @@ def update_document_content(
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     if not existing.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
@@ -191,7 +194,8 @@ def update_document_content(
             "total_ttc": body.total_ttc,
         }).eq("id", doc_id).eq("user_id", uid).execute()
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     row = (
         db.table("documents").select("*").eq("id", doc_id).eq("user_id", uid).execute()
@@ -221,7 +225,8 @@ def list_documents(current_user: CurrentUser = Depends(get_current_user)):
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     docs = docs_res.data or []
 
@@ -283,7 +288,8 @@ def get_document(doc_id: str, current_user: CurrentUser = Depends(get_current_us
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     if not res.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
@@ -378,6 +384,13 @@ def convert_to_facture(doc_id: str, current_user: CurrentUser = Depends(get_curr
     source = _fetch_source_document(db, doc_id, uid)
     if source["type_doc"] != "devis":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seul un devis peut être converti en facture")
+    # Batch 16 : le frontend ne montre ce bouton que sur un devis signé —
+    # cette vérification manquait côté serveur (docstring du module déjà
+    # obsolète, trouvé par revue de code). Cohérent avec create-acompte,
+    # qui impose la même règle pour la même raison : facturer un devis
+    # jamais accepté par le client n'a pas de sens métier.
+    if source["statut"] != "signé":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Seul un devis signé peut être converti en facture")
 
     titre_source = source.get("titre") or ""
     titre = "Facture" + titre_source[len("Devis"):] if titre_source.lower().startswith("devis") else titre_source
@@ -428,7 +441,8 @@ def convert_to_facture(doc_id: str, current_user: CurrentUser = Depends(get_curr
             "document_source_id": doc_id,
         }).execute()
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     row = ins.data[0]
     client_nom = _client_nom_for(db, row.get("client_id"), uid)
@@ -462,7 +476,8 @@ def duplicate_document(doc_id: str, current_user: CurrentUser = Depends(get_curr
             "statut": "brouillon",
         }).execute()
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     row = ins.data[0]
     client_nom = _client_nom_for(db, row.get("client_id"), uid)
@@ -542,7 +557,8 @@ def create_acompte(
             "document_source_id": doc_id,
         }).execute()
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     row = ins.data[0]
     client_nom = _client_nom_for(db, row.get("client_id"), uid)
@@ -634,7 +650,8 @@ def patch_document_status(
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     logger.info(
         "[PATCH] doc_id=%s uid=%s statut_reçu=%r lignes_trouvées=%d",
@@ -690,7 +707,8 @@ def delete_document(doc_id: str, current_user: CurrentUser = Depends(get_current
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     if not existing.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
@@ -700,7 +718,8 @@ def delete_document(doc_id: str, current_user: CurrentUser = Depends(get_current
             {"deleted_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", doc_id).eq("user_id", uid).execute()
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
 
 # ── POST /documents/{id}/send ────────────────────────────────────────────────
@@ -731,7 +750,8 @@ def send_document_email(
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     if not existing.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
@@ -828,7 +848,8 @@ def get_signature_link(doc_id: str, current_user: CurrentUser = Depends(get_curr
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     if not existing.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
@@ -852,7 +873,8 @@ def get_signature_link(doc_id: str, current_user: CurrentUser = Depends(get_curr
                 "signature_token_expires_at": expires_at,
             }).eq("id", doc_id).eq("user_id", uid).execute()
         except Exception as exc:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+            logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     settings = get_settings()
     return {"url": f"{settings.frontend_url}/devis/{token}"}

@@ -21,11 +21,39 @@ _RATE_LIMIT  = 10   # max requêtes par fenêtre
 _RATE_WINDOW = 60   # secondes
 
 
+def _get_client_ip(req: Request) -> str:
+    """IP réelle du visiteur — derrière le proxy de Render, req.client.host
+    reflète l'IP interne du proxy pour TOUTES les requêtes, ce qui
+    transformerait la limite "10 req/min par IP" en une limite globale
+    partagée par tous les utilisateurs (trouvé par revue de code, Batch 16).
+    X-Forwarded-For contient l'IP d'origine en premier ; on ne lui fait
+    confiance que parce qu'on est nous-mêmes derrière un proxy connu — ce
+    n'est qu'un rate limit de confort, pas un contrôle de sécurité critique."""
+    forwarded = req.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return req.client.host if req.client else "unknown"
+
+
 def _check_rate_limit(client_ip: str) -> bool:
     now    = datetime.utcnow()
     cutoff = now - timedelta(seconds=_RATE_WINDOW)
-    _rate_store[client_ip] = [t for t in _rate_store[client_ip] if t > cutoff]
-    if len(_rate_store[client_ip]) >= _RATE_LIMIT:
+
+    # Purge globale des IP inactives (fenêtre expirée) à chaque appel — sans
+    # ça, _rate_store grossissait indéfiniment sur la durée de vie du
+    # process : filtrer uniquement la fenêtre du client courant (l'ancien
+    # code) laisse toujours au moins 1 entrée par IP déjà vue, donc aucune
+    # clé ne redevient jamais vide (trouvé par revue de code, Batch 16).
+    # Coût négligeable : le nombre d'IP distinctes actives sur une fenêtre
+    # de 60s reste petit pour ce volume de trafic.
+    for ip in list(_rate_store.keys()):
+        fenetre = [t for t in _rate_store[ip] if t > cutoff]
+        if fenetre:
+            _rate_store[ip] = fenetre
+        else:
+            del _rate_store[ip]
+
+    if len(_rate_store.get(client_ip, [])) >= _RATE_LIMIT:
         return False
     _rate_store[client_ip].append(now)
     return True
@@ -41,7 +69,7 @@ async def generate_quote_endpoint(request: QuoteRequest, req: Request):
     - Retourne un devis JSON structuré et validé
     - Limité à 10 requêtes/minute par IP
     """
-    client_ip = req.client.host if req.client else "unknown"
+    client_ip = _get_client_ip(req)
     if not _check_rate_limit(client_ip):
         raise HTTPException(
             status_code=429,
@@ -84,7 +112,7 @@ async def import_quote_endpoint(
     - Les infos artisan du document importé sont ignorées au profit du profil enregistré
     - Retourne un devis JSON éditable dans QuotePreview
     """
-    client_ip = req.client.host if req.client else "unknown"
+    client_ip = _get_client_ip(req)
     if not _check_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Trop de requetes. Reessayez dans une minute.")
 

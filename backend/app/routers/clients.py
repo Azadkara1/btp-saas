@@ -9,10 +9,14 @@ PUT  /clients/{id}     → édition des coordonnées
 
 ⚠️  Client service_role : filtrage user_id obligatoire sur chaque requête.
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.auth import get_current_user, CurrentUser
 from app.core.supabase_client import get_supabase_admin
+
+logger = logging.getLogger(__name__)
 from app.models.client import ClientSummary, ClientDetail, ClientUpdate
 from app.models.document import DocumentSummary
 
@@ -42,7 +46,8 @@ def list_clients(current_user: CurrentUser = Depends(get_current_user)):
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     clients = clients_res.data or []
     docs = docs_res.data or []
@@ -87,7 +92,8 @@ def get_client(client_id: str, current_user: CurrentUser = Depends(get_current_u
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     if not c_res.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client introuvable")
@@ -110,7 +116,8 @@ def get_client(client_id: str, current_user: CurrentUser = Depends(get_current_u
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     docs = docs_res.data or []
     documents = [
@@ -170,7 +177,8 @@ def update_client(
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     if not existing.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client introuvable")
@@ -189,7 +197,8 @@ def update_client(
             .execute()
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
 
     client = c_res.data[0]
 

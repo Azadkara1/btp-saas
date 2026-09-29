@@ -49,6 +49,39 @@ TOOLS = [
 MAX_OUTPUT_TOKENS = 8192  # 4096 était insuffisant pour les gros devis (40+ lignes)
 
 
+def _inject_post_generation(devis: Devis, request: QuoteRequest) -> Devis:
+    """Injection post-génération (jamais envoyée à Claude) : IBAN/BIC,
+    assurance, coordonnées artisan, numérotation, remise/acompte, modèle,
+    signature. Extraite de generate_quote() pour être testable sans appeler
+    l'API Anthropic (Batch 16 — cette logique n'avait aucun test dédié)."""
+    a = devis.artisan
+    if request.artisan_iban:         a.iban         = request.artisan_iban
+    if request.artisan_bic:          a.bic          = request.artisan_bic
+    if request.artisan_assurance_nom:         a.assurance_nom         = request.artisan_assurance_nom
+    if request.artisan_assurance_contrat:     a.assurance_contrat     = request.artisan_assurance_contrat
+    if request.artisan_assurance_couverture:  a.assurance_couverture  = request.artisan_assurance_couverture
+    if request.artisan_adresse:      a.adresse      = request.artisan_adresse
+    if request.artisan_code_postal:  a.code_postal  = request.artisan_code_postal
+    if request.artisan_ville:        a.ville        = request.artisan_ville
+    if request.artisan_telephone:    a.telephone    = request.artisan_telephone
+    if request.artisan_email:        a.email        = request.artisan_email
+    if request.artisan_site_web:     a.site_web     = request.artisan_site_web
+    if request.artisan_logo_base64:  a.logo_base64  = request.artisan_logo_base64
+    if request.client_email:         devis.client.email = request.client_email
+    if request.numero_document:
+        devis.numero_document = request.numero_document
+    if request.remise_type:    devis.remise_type   = request.remise_type
+    if request.remise_valeur:  devis.remise_valeur = request.remise_valeur
+    if request.acompte:        devis.acompte       = request.acompte
+    if request.retenue_garantie_taux: devis.retenue_garantie_taux = request.retenue_garantie_taux
+    devis.autoliquidation = request.autoliquidation
+    devis.modele = request.modele or "moderne"
+    devis.validite_jours = request.validite_jours
+    if request.conditions_paiement: devis.conditions_paiement = request.conditions_paiement
+    devis.afficher_signature = request.afficher_signature
+    return devis
+
+
 async def generate_quote(request: QuoteRequest) -> QuoteResponse:
     """
     Génère un devis structuré à partir d'une description textuelle.
@@ -81,31 +114,7 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
         if stop == "end_turn":
             result = _parse_final_response(response, total_tokens)
             if result.success and result.devis:
-                a = result.devis.artisan
-                if request.artisan_iban:         a.iban         = request.artisan_iban
-                if request.artisan_bic:          a.bic          = request.artisan_bic
-                if request.artisan_assurance_nom:         a.assurance_nom         = request.artisan_assurance_nom
-                if request.artisan_assurance_contrat:     a.assurance_contrat     = request.artisan_assurance_contrat
-                if request.artisan_assurance_couverture:  a.assurance_couverture  = request.artisan_assurance_couverture
-                if request.artisan_adresse:      a.adresse      = request.artisan_adresse
-                if request.artisan_code_postal:  a.code_postal  = request.artisan_code_postal
-                if request.artisan_ville:        a.ville        = request.artisan_ville
-                if request.artisan_telephone:    a.telephone    = request.artisan_telephone
-                if request.artisan_email:        a.email        = request.artisan_email
-                if request.artisan_site_web:     a.site_web     = request.artisan_site_web
-                if request.artisan_logo_base64:  a.logo_base64  = request.artisan_logo_base64
-                if request.client_email:         result.devis.client.email = request.client_email
-                if request.numero_document:
-                    result.devis.numero_document = request.numero_document
-                if request.remise_type:    result.devis.remise_type   = request.remise_type
-                if request.remise_valeur:  result.devis.remise_valeur = request.remise_valeur
-                if request.acompte:        result.devis.acompte       = request.acompte
-                if request.retenue_garantie_taux: result.devis.retenue_garantie_taux = request.retenue_garantie_taux
-                result.devis.autoliquidation = request.autoliquidation
-                result.devis.modele = request.modele or "moderne"
-                result.devis.validite_jours = request.validite_jours
-                if request.conditions_paiement: result.devis.conditions_paiement = request.conditions_paiement
-                result.devis.afficher_signature = request.afficher_signature
+                result.devis = _inject_post_generation(result.devis, request)
                 # Garde-fou : avertir si plusieurs lignes de natures différentes ont le même PU
                 pus = [round(l.prix_unitaire_ht, 2) for l in result.devis.lignes]
                 duplicates = [pu for pu, cnt in Counter(pus).items() if cnt > 1]

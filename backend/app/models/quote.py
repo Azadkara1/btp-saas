@@ -90,14 +90,16 @@ class Devis(BaseModel):
     notes: Optional[str] = None
     numero_document: Optional[str] = None
     remise_type: Optional[str] = None      # "pourcentage" | "montant_fixe"
-    remise_valeur: Optional[float] = None
-    acompte: Optional[float] = None
+    remise_valeur: Optional[float] = Field(None, ge=0)  # % ou montant fixe selon remise_type — jamais négatif
+    acompte: Optional[float] = Field(None, ge=0)
     modele: Optional[str] = "moderne"     # "moderne" | "pro" — injecté post-génération, jamais envoyé à Claude
     validite_jours: Optional[int] = None  # durée de validité devis (jours) — libre, rien si absent
     conditions_paiement: Optional[str] = None  # ex: "30% à la commande, solde à réception"
     afficher_signature: bool = True       # affiche l'encadré "Bon pour accord" / "Signature client" — injecté post-génération
     type_facture: Optional[str] = None    # "acompte" | "solde" | None — libellé d'affichage uniquement (Batch 12 T4-1), n'entre dans aucun calcul
-    retenue_garantie_taux: Optional[float] = None  # % retenu sur le TTC (ex: 5.0) — Loi du 16/07/1971, plafond légal 5% marchés privés (Batch 12 T4-3)
+    # Plafond légal 5% marchés privés (Loi du 16/07/1971) — appliqué en Field()
+    # depuis Batch 16, trouvé non vérifié par une revue de code.
+    retenue_garantie_taux: Optional[float] = Field(None, ge=0, le=5)
     autoliquidation: bool = False  # sous-traitance BTP, TVA due par le preneur — art. 283-2 nonies du CGI (Batch 12 T4-5)
 
 
@@ -142,9 +144,9 @@ class QuoteRequest(BaseModel):
     client_email: Optional[str] = None  # jamais envoyé à Claude — injecté post-génération (Batch 11 T4)
     numero_document: Optional[str] = None
     remise_type: Optional[str] = None
-    remise_valeur: Optional[float] = None
-    acompte: Optional[float] = None
-    retenue_garantie_taux: Optional[float] = None
+    remise_valeur: Optional[float] = Field(None, ge=0)
+    acompte: Optional[float] = Field(None, ge=0)
+    retenue_garantie_taux: Optional[float] = Field(None, ge=0, le=5)
     autoliquidation: bool = False
     modele: Optional[str] = "moderne"
     validite_jours: Optional[int] = None
