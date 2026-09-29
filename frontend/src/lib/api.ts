@@ -126,6 +126,25 @@ export async function saveDocument(doc: DocumentCreate): Promise<DocumentDetail>
   return response.json();
 }
 
+/**
+ * Persiste les modifications d'un document déjà créé (Batch 16) — sans ça,
+ * les éditions faites après la génération initiale (lignes, remise, client...)
+ * ne survivaient pas à une fermeture/réouverture depuis l'historique.
+ * Backend : n'accepte que les brouillons (409 sinon, cf. routers/documents.py).
+ */
+export async function updateDocument(id: string, doc: DocumentCreate): Promise<DocumentDetail> {
+  const response = await fetch(`${API_URL}/documents/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...await authHeader() },
+    body: JSON.stringify(doc),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `Erreur ${response.status}`);
+  }
+  return response.json();
+}
+
 export async function listDocuments(): Promise<DocumentSummary[]> {
   const response = await fetch(`${API_URL}/documents`, {
     method: "GET",

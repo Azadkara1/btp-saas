@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { HardHat, RefreshCw, FileText, Receipt, Percent, Calendar, LogOut, History, Send, CheckCircle, XCircle, Clock, Copy, ArrowRightLeft, Users, LayoutDashboard, Link2, Wallet } from "lucide-react";
 import QuoteForm from "@/components/QuoteForm";
@@ -15,7 +15,7 @@ import ClientsView from "@/components/ClientsView";
 import DashboardView from "@/components/DashboardView";
 import SendEmailModal from "@/components/SendEmailModal";
 import { createClient } from "@/lib/supabase-client";
-import { saveDocument, updateDocumentStatus, convertToFacture, duplicateDocument, getSignatureLink, createAcompte, getProfile, getNumerotationStatus } from "@/lib/api";
+import { saveDocument, updateDocument, updateDocumentStatus, convertToFacture, duplicateDocument, getSignatureLink, createAcompte, getProfile, getNumerotationStatus } from "@/lib/api";
 import { formatNumeroPreview } from "@/components/QuoteForm";
 
 type DocumentType = "devis" | "facture";
@@ -123,6 +123,16 @@ export default function HomePage() {
   // auto-rempli par nous (jamais modifié à la main) — seul cas où la
   // bascule Devis/Facture est autorisée à le recalculer automatiquement.
   const [numeroDocumentAuto, setNumeroDocumentAuto] = useState(false);
+  // Batch 16 : identité du document affiché — incrémentée à chaque fois
+  // qu'un NOUVEAU document remplace celui affiché dans QuotePreview
+  // (génération, import, ouverture depuis l'historique, conversion,
+  // duplication, facture d'acompte — ces 3 derniers passent tous par
+  // handleOpenFromHistory). Utilisée comme `key` sur <QuotePreview> pour
+  // forcer un remount complet : sans ça, QuotePreview reste monté et ses
+  // ~12 états locaux (lignes, remise, acompte, mentions, client...)
+  // restent figés sur l'ANCIEN document — un artisan pouvait exporter une
+  // facture d'acompte avec les lignes/totaux du devis d'origine.
+  const [documentInstanceKey, setDocumentInstanceKey] = useState(0);
   const [saveFeedback, setSaveFeedback]             = useState<"saving" | "saved" | "error" | null>(null);
   const [markEnvoyeError, setMarkEnvoyeError]       = useState<string | null>(null);
   const [actionLoading, setActionLoading]           = useState<"convert" | "duplicate" | "signature-link" | "acompte" | null>(null);
@@ -137,22 +147,23 @@ export default function HomePage() {
     }
   }, [result, documentType, filenameCustomized]);
 
+  const buildDocumentPayload = (devis: Devis, docType: DocumentType, date: string): DocumentCreate => ({
+    type_doc: docType,
+    titre: buildDefaultFilename(devis, docType),
+    numero_document: devis.numero_document ?? null,
+    date_document: date,
+    devis_payload: devis,
+    total_ttc: devis.totaux.total_ttc,
+    client_nom: devis.client.nom ?? null,
+    client_adresse: devis.client.adresse ?? null,
+    client_code_postal: devis.client.code_postal ?? null,
+    client_ville: devis.client.ville ?? null,
+  });
+
   const doAutoSave = async (devis: Devis, docType: DocumentType, date: string) => {
     setSaveFeedback("saving");
     try {
-      const payload: DocumentCreate = {
-        type_doc: docType,
-        titre: buildDefaultFilename(devis, docType),
-        numero_document: devis.numero_document ?? null,
-        date_document: date,
-        devis_payload: devis,
-        total_ttc: devis.totaux.total_ttc,
-        client_nom: devis.client.nom ?? null,
-        client_adresse: devis.client.adresse ?? null,
-        client_code_postal: devis.client.code_postal ?? null,
-        client_ville: devis.client.ville ?? null,
-      };
-      const created = await saveDocument(payload);
+      const created = await saveDocument(buildDocumentPayload(devis, docType, date));
       setSavedDocumentId(created.id);
       setSavedDocumentStatut("brouillon");
       setSaveFeedback("saved");
@@ -161,6 +172,28 @@ export default function HomePage() {
       setSaveFeedback("error");
       setTimeout(() => setSaveFeedback(null), 3000);
     }
+  };
+
+  // Batch 16 : persiste les modifications faites APRÈS la génération initiale
+  // (édition de lignes, remise, mentions, client...). Avant ça, seul l'état
+  // généré au départ était jamais sauvegardé — un devis modifié puis rouvert
+  // depuis l'historique perdait silencieusement toutes ses modifications.
+  // Débounce : évite un appel réseau à chaque frappe.
+  const updateSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const doUpdateSave = (id: string, devis: Devis, docType: DocumentType, date: string) => {
+    if (updateSaveTimer.current) clearTimeout(updateSaveTimer.current);
+    updateSaveTimer.current = setTimeout(async () => {
+      setSaveFeedback("saving");
+      try {
+        await updateDocument(id, buildDocumentPayload(devis, docType, date));
+        setSaveFeedback("saved");
+        setTimeout(() => setSaveFeedback(null), 3000);
+      } catch {
+        setSaveFeedback("error");
+        setTimeout(() => setSaveFeedback(null), 3000);
+      }
+    }, 900);
   };
 
   // Batch 14 : numéro provisoire dès la génération, calculé avec le même
@@ -197,6 +230,7 @@ export default function HomePage() {
         setNumeroDocumentAuto(false);
       }
       setResult(devis);
+      setDocumentInstanceKey(k => k + 1);
       setTokensUsed(response.tokens_used || null);
       doAutoSave(devis, documentType, documentDate);
       setTimeout(() => {
@@ -253,6 +287,7 @@ export default function HomePage() {
       setNumeroDocumentAuto(false);
     }
     setResult(finalDevis);
+    setDocumentInstanceKey(k => k + 1);
     setImportedResponse(null);
     setTokensUsed(null);
     setSavedDocumentId(null);
@@ -272,18 +307,29 @@ export default function HomePage() {
     if (numeroDocumentAuto && result) {
       const provisoire = await computeProvisionalNumero(newType);
       if (provisoire) {
-        setResult(prev => prev ? { ...prev, numero_document: provisoire } : prev);
+        const updated = { ...result, numero_document: provisoire };
+        setResult(updated);
+        if (savedDocumentId && savedDocumentStatut === "brouillon") {
+          doUpdateSave(savedDocumentId, updated, newType, documentDate);
+        }
       }
     }
   };
 
   // Détecte une édition manuelle du numéro dans QuotePreview (le seul champ
   // qu'on ne doit plus jamais recalculer automatiquement après ça).
+  // Batch 16 : persiste aussi la modification (débounce) — c'est le chemin
+  // par lequel TOUTE édition dans QuotePreview transite (lignes, remise,
+  // mentions, client...), donc le seul endroit nécessaire pour corriger
+  // "les modifications ne sont pas prises en compte au retour".
   const handleQuotePreviewUpdate = (updated: Devis) => {
     if (numeroDocumentAuto && result && updated.numero_document !== result.numero_document) {
       setNumeroDocumentAuto(false);
     }
     setResult(updated);
+    if (savedDocumentId && savedDocumentStatut === "brouillon") {
+      doUpdateSave(savedDocumentId, updated, documentType, documentDate);
+    }
   };
 
   const handleReset = () => {
@@ -306,6 +352,9 @@ export default function HomePage() {
   const handleChangeStatut = async (nextStatut: StatutDocument) => {
     if (!savedDocumentId) return;
     setMarkEnvoyeError(null);
+    // Une sauvegarde de contenu en attente (debounce) viserait un document
+    // qui ne sera plus un brouillon après cette transition → 409 inutile.
+    if (updateSaveTimer.current) clearTimeout(updateSaveTimer.current);
     try {
       const r = await updateDocumentStatus(savedDocumentId, nextStatut);
       setSavedDocumentStatut(nextStatut);
@@ -327,6 +376,7 @@ export default function HomePage() {
     setDocumentType(detail.type_doc === "facture" ? "facture" : "devis");
     setNumeroDocumentAuto(false); // numéro déjà attribué/sauvegardé — jamais recalculé automatiquement
     setResult(detail.devis_payload);
+    setDocumentInstanceKey(k => k + 1);
     setSignatureInfo(
       detail.signature_nom_signataire
         ? { nom: detail.signature_nom_signataire, imageBase64: detail.signature_image_base64, date: detail.date_signature }
@@ -639,6 +689,7 @@ export default function HomePage() {
             </div>
 
             <QuotePreview
+              key={documentInstanceKey}
               devis={result}
               documentType={documentType}
               withTva={withTva}

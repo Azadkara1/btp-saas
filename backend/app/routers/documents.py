@@ -4,7 +4,10 @@ Routeur documents — Lots 3 & 4 + Phase 2 (conversion & duplication) + Batch 11
 POST   /documents                  → auto-save brouillon post-génération + upsert client
 GET    /documents                  → historique de l'utilisateur (colonnes indexées)
 GET    /documents/{id}             → Devis complet pour réouverture
+PUT    /documents/{id}             → met à jour le contenu (devis_payload) d'un brouillon existant
+                                      — jamais au-delà du statut brouillon (Batch 16)
 PATCH  /documents/{id}             → mise à jour statut ; brouillon→envoyé attribue le numéro
+                                      — vérifie la transition (Batch 16, cf. _TRANSITIONS_AUTORISEES)
 POST   /documents/{id}/convert     → duplique un devis signé en facture brouillon (filiation)
 POST   /documents/{id}/duplicate   → duplique un document à l'identique (même type_doc)
 POST   /documents/{id}/create-acompte → génère une facture d'acompte à partir d'un devis signé
@@ -73,6 +76,39 @@ def _row_to_detail(row: dict, client_nom: str | None) -> DocumentDetail:
     )
 
 
+def _upsert_client(db, uid: str, body: DocumentCreate) -> str | None:
+    """Upsert client (clé : user_id + nom). Partagé par POST /documents et
+    PUT /documents/{id} — ne jamais dupliquer cette logique (Batch 16)."""
+    if not body.client_nom:
+        return None
+    try:
+        existing_client = (
+            db.table("clients")
+            .select("id")
+            .eq("user_id", uid)
+            .eq("nom", body.client_nom)
+            .execute()
+        )
+        if existing_client.data:
+            client_id = existing_client.data[0]["id"]
+            db.table("clients").update({
+                "adresse": body.client_adresse,
+                "code_postal": body.client_code_postal,
+                "ville": body.client_ville,
+            }).eq("id", client_id).eq("user_id", uid).execute()
+            return client_id
+        ins = db.table("clients").insert({
+            "user_id": uid,
+            "nom": body.client_nom,
+            "adresse": body.client_adresse,
+            "code_postal": body.client_code_postal,
+            "ville": body.client_ville,
+        }).execute()
+        return ins.data[0]["id"]
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
 # ── POST /documents ─────────────────────────────────────────────────────────
 
 @router.post("", response_model=DocumentDetail, status_code=status.HTTP_201_CREATED)
@@ -83,37 +119,8 @@ def create_document(
     uid = current_user.user_id
     db = get_supabase_admin()
 
-    # ① Upsert client (clé : user_id + nom)
-    client_id = None
-    if body.client_nom:
-        try:
-            existing_client = (
-                db.table("clients")
-                .select("id")
-                .eq("user_id", uid)
-                .eq("nom", body.client_nom)
-                .execute()
-            )
-            if existing_client.data:
-                client_id = existing_client.data[0]["id"]
-                db.table("clients").update({
-                    "adresse": body.client_adresse,
-                    "code_postal": body.client_code_postal,
-                    "ville": body.client_ville,
-                }).eq("id", client_id).eq("user_id", uid).execute()
-            else:
-                ins = db.table("clients").insert({
-                    "user_id": uid,
-                    "nom": body.client_nom,
-                    "adresse": body.client_adresse,
-                    "code_postal": body.client_code_postal,
-                    "ville": body.client_ville,
-                }).execute()
-                client_id = ins.data[0]["id"]
-        except Exception as exc:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    client_id = _upsert_client(db, uid, body)
 
-    # ② Insert document en brouillon
     try:
         ins = db.table("documents").insert({
             "user_id": uid,
@@ -130,6 +137,65 @@ def create_document(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
     row = ins.data[0]
+    return _row_to_detail(row, body.client_nom)
+
+
+# ── PUT /documents/{id} ──────────────────────────────────────────────────────
+# Persiste les modifications faites dans QuotePreview après la génération
+# initiale. Batch 16 : avant ça, un devis édité puis rouvert depuis
+# l'historique perdait toutes ses modifications — seul l'état généré au
+# départ était jamais sauvegardé. Volontairement restreint au statut
+# brouillon : au-delà (envoyé/signé/payé...), le contenu ne doit plus
+# bouger silencieusement — le client a potentiellement déjà vu/signé une
+# version précise de ce document.
+
+@router.put("/{doc_id}", response_model=DocumentDetail)
+def update_document_content(
+    doc_id: str,
+    body: DocumentCreate,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    uid = current_user.user_id
+    db = get_supabase_admin()
+
+    try:
+        existing = (
+            db.table("documents")
+            .select("statut")
+            .eq("id", doc_id)
+            .eq("user_id", uid)
+            .is_("deleted_at", "null")
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+    if not existing.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+
+    if existing.data[0]["statut"] != "brouillon":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ce document n'est plus un brouillon, son contenu ne peut plus être modifié.",
+        )
+
+    client_id = _upsert_client(db, uid, body)
+
+    try:
+        db.table("documents").update({
+            "client_id": client_id,
+            "titre": body.titre,
+            "numero_document": body.numero_document,
+            "date_document": body.date_document,
+            "devis_payload": body.devis_payload,
+            "total_ttc": body.total_ttc,
+        }).eq("id", doc_id).eq("user_id", uid).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+    row = (
+        db.table("documents").select("*").eq("id", doc_id).eq("user_id", uid).execute()
+    ).data[0]
     return _row_to_detail(row, body.client_nom)
 
 
@@ -319,6 +385,10 @@ def convert_to_facture(doc_id: str, current_user: CurrentUser = Depends(get_curr
     # Factures d'acompte déjà émises pour ce devis (T4-1) — n'importe quel
     # statut hors supprimé : dès qu'une facture d'acompte existe, l'artisan
     # l'a délibérément créée pour ce montant, elle doit se déduire du solde.
+    # Batch 16 : cette requête NE DOIT JAMAIS échouer silencieusement — un
+    # `except: montant_deja_verse = 0` transformerait une panne réseau/DB en
+    # double-facturation (le client paierait le total complet en plus de
+    # l'acompte déjà réglé séparément), sans aucune trace d'erreur.
     try:
         acompte_res = (
             db.table("documents")
@@ -329,13 +399,17 @@ def convert_to_facture(doc_id: str, current_user: CurrentUser = Depends(get_curr
             .is_("deleted_at", "null")
             .execute()
         )
-        montant_deja_verse = sum(
-            (d.get("total_ttc") or 0)
-            for d in (acompte_res.data or [])
-            if (d.get("devis_payload") or {}).get("type_facture") == "acompte"
+    except Exception as exc:
+        logger.error("[CONVERT] échec de la recherche des factures d'acompte pour devis %s : %s", doc_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Impossible de vérifier les acomptes déjà facturés — conversion annulée pour éviter une double facturation.",
         )
-    except Exception:
-        montant_deja_verse = 0
+    montant_deja_verse = sum(
+        (d.get("total_ttc") or 0)
+        for d in (acompte_res.data or [])
+        if (d.get("devis_payload") or {}).get("type_facture") == "acompte"
+    )
 
     devis = Devis(**source["devis_payload"])
     devis, total_ttc = _apply_montant_deja_verse(devis, montant_deja_verse)
@@ -486,6 +560,23 @@ STATUT_DATE_COLUMN: dict[str, str] = {
     "expiré": "date_expiration",
 }
 
+# Graphe des transitions autorisées — reflète exactement STATUT_TRANSITIONS
+# dans frontend/src/app/page.tsx. Batch 16 : avant ça, PATCH /documents/{id}
+# acceptait n'importe quel statut cible sans vérifier le statut actuel — un
+# appel API direct (hors frontend) pouvait faire passer un brouillon à
+# "payé" sans jamais attribuer de numéro légal, ou créer un devis "signé"
+# sans aucune preuve de signature. "envoyé" → "envoyé" est explicitement
+# autorisé : POST /documents/{id}/send doit pouvoir renvoyer l'email sans
+# échouer, mais ne doit jamais faire RÉGRESSER un document déjà signé/payé.
+_TRANSITIONS_AUTORISEES: dict[str, set[str]] = {
+    "brouillon": {"envoyé"},
+    "envoyé": {"envoyé", "signé", "refusé", "expiré"},
+    "signé": {"payé"},
+    "payé": set(),
+    "refusé": set(),
+    "expiré": set(),
+}
+
 
 def _statut_transition_update(uid: str, doc: dict, nouveau_statut: str) -> dict:
     """
@@ -494,7 +585,18 @@ def _statut_transition_update(uid: str, doc: dict, nouveau_statut: str) -> dict:
     attribution du numéro légal séquentiel à la première transition brouillon→envoyé.
     Partagé par PATCH /documents/{id} et POST /documents/{id}/send — ne jamais
     dupliquer cette logique, l'attribution du numéro ne doit se faire qu'une fois.
+
+    Lève HTTP 409 si la transition n'est pas autorisée depuis le statut actuel
+    (cf. _TRANSITIONS_AUTORISEES) — vérifié ici, au niveau le plus bas, pour
+    protéger les deux appelants sans dupliquer le contrôle.
     """
+    statut_actuel = doc["statut"]
+    if nouveau_statut not in _TRANSITIONS_AUTORISEES.get(statut_actuel, set()):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Transition de statut refusée : '{statut_actuel}' → '{nouveau_statut}' n'est pas autorisée.",
+        )
+
     update_data: dict = {"statut": nouveau_statut}
 
     date_col = STATUT_DATE_COLUMN.get(nouveau_statut)
