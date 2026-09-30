@@ -46,7 +46,7 @@ TOOLS = [
     }
 ]
 
-MAX_OUTPUT_TOKENS = 8192  # 4096 était insuffisant pour les gros devis (40+ lignes)
+MAX_OUTPUT_TOKENS = 64000  # 8192 tronquait encore les très gros devis (au-delà de ~70 lignes)
 
 
 def _inject_post_generation(devis: Devis, request: QuoteRequest) -> Devis:
@@ -96,13 +96,17 @@ async def generate_quote(request: QuoteRequest) -> QuoteResponse:
     # ── Boucle agentic Tool Use ──────────────────────────────────
     while True:
         iteration += 1
-        response = client.messages.create(
+        # En streaming : le SDK refuse une requête non-streamée dont le
+        # max_tokens est estimé dépasser ~10 min (ValueError côté client),
+        # ce qui devenait systématique une fois MAX_OUTPUT_TOKENS relevé.
+        with client.messages.stream(
             model=settings.claude_model,
             max_tokens=MAX_OUTPUT_TOKENS,
             system=QUOTE_SYSTEM_PROMPT,
             tools=TOOLS,
             messages=messages
-        )
+        ) as stream:
+            response = stream.get_final_message()
 
         stop       = response.stop_reason
         out_tokens = response.usage.output_tokens

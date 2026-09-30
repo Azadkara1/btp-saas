@@ -18,7 +18,7 @@ settings = get_settings()
 _client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
 MAX_FILE_BYTES  = 10 * 1024 * 1024  # 10 Mo
-MAX_OUTPUT_TOKENS = 8000  # garde-fou : ~50 lignes JSON + descriptions groupées
+MAX_OUTPUT_TOKENS = 64000  # 8000 tronquait l'extraction sur les gros documents (au-delà de ~50 lignes)
 
 
 async def import_quote(
@@ -56,7 +56,9 @@ def _extract_from_pdf(pdf_bytes: bytes) -> QuoteResponse:
     """Envoie le PDF en bloc document natif à Claude (pas de parseur tiers)."""
     pdf_b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
     try:
-        response = _client.messages.create(
+        # En streaming : le SDK refuse une requête non-streamée dont le
+        # max_tokens est estimé dépasser ~10 min (ValueError côté client).
+        with _client.messages.stream(
             model=settings.claude_model,
             max_tokens=MAX_OUTPUT_TOKENS,
             system=IMPORT_EXTRACTION_PROMPT,
@@ -79,7 +81,8 @@ def _extract_from_pdf(pdf_bytes: bytes) -> QuoteResponse:
                     ],
                 }
             ],
-        )
+        ) as stream:
+            response = stream.get_final_message()
         tokens = response.usage.input_tokens + response.usage.output_tokens
         logging.info("[IMPORT_PDF] stop=%s tokens=%d", response.stop_reason, tokens)
         return _parse_import_response(response, tokens)
@@ -109,7 +112,7 @@ def _extract_from_docx(docx_bytes: bytes) -> QuoteResponse:
         return QuoteResponse(success=False, error="Impossible de lire ce fichier .docx.")
 
     try:
-        response = _client.messages.create(
+        with _client.messages.stream(
             model=settings.claude_model,
             max_tokens=MAX_OUTPUT_TOKENS,
             system=IMPORT_EXTRACTION_PROMPT,
@@ -119,7 +122,8 @@ def _extract_from_docx(docx_bytes: bytes) -> QuoteResponse:
                     "content": f"Voici le contenu du document à extraire :\n\n{text}",
                 }
             ],
-        )
+        ) as stream:
+            response = stream.get_final_message()
         tokens = response.usage.input_tokens + response.usage.output_tokens
         logging.info("[IMPORT_DOCX] stop=%s tokens=%d", response.stop_reason, tokens)
         return _parse_import_response(response, tokens)
