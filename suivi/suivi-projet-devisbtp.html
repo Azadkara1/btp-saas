@@ -115,8 +115,8 @@
   <header class="top">
     <div class="brand">
       <h1>Tableau de bord — DevisBTP</h1>
-      <span class="src">source · CLAUDE.md · 18 août 2026 (Batch 11)</span>
-      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. <strong>🚀 Étape 1 MVP terminée et en production (Render + Vercel).</strong> Étape 2 en cours : Auth <strong>Lot 1 ✅</strong> — Profil <strong>Lot 2 ✅</strong> — Documents/Numérotation <strong>Lots 3 &amp; 4 ✅</strong> — Cycle de vie complet (statuts, conversion, lots, clients, dashboard, anti-pause) <strong>Batch 10 ✅</strong> — Conformité, suppression, tests, email, expiration <strong>Batch 11 ✅</strong> — Stripe (Lot 5) à venir.</p>
+      <span class="src">source · CLAUDE.md · 1er octobre 2026 (Batch 19)</span>
+      <p>Suivi de développement du SaaS de devis &amp; factures pour le BTP. <strong>🚀 Étape 1 MVP terminée et en production (Render + Vercel).</strong> Étape 2 : Auth <strong>Lot 1 ✅</strong> — Profil <strong>Lot 2 ✅</strong> — Documents/Numérotation <strong>Lots 3 &amp; 4 ✅</strong> — Cycle de vie complet <strong>Batch 10 ✅</strong> — Conformité/suppression/email/expiration <strong>Batch 11 ✅</strong> — Signature électronique, acompte/solde/retenue/TVA réduite/autoliquidation, numérotation personnalisable <strong>Batch 12–13 ✅</strong> — Corrections & confort <strong>Batch 14–15 ✅</strong> — Revue de code + apurement dette technique <strong>Batch 16–18 ✅</strong> — Fix limite taille devis/import <strong>Batch 19 ✅</strong>. Stripe (Lot 5) à venir.</p>
     </div>
     <div class="progress-card">
       <div class="lbl">Avancement global</div>
@@ -567,6 +567,65 @@ const SEED = {cards:[
   {id:'d95', col:'done', etape:2, tags:['BDD','Back'],
    title:'T5 — Expiration automatique des devis',
    desc:'RPC expire_devis_perimes() (SECURITY DEFINER — appelée via la clé anon depuis un GitHub Action, RLS bypass nécessaire). Colonne date_expiration dédiée (≠ date_refus). validite_jours=NULL n\'expire jamais. Nouveau workflow quotidien expire-devis.yml (réutilise les secrets existants, bonus anti-pause).'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 12 — Signature, acompte/solde, conformité fiscale (25 août 2026)
+  // ══════════════════════════════════════════════
+  {id:'d96', col:'done', etape:2, tags:['Back','Bug'],
+   title:'Correctif sécurité — cron d\'expiration appelable par n\'importe qui',
+   desc:'expire_devis_perimes() était exécutable via la clé anon, publique dans le bundle JS — n\'importe qui aurait pu expirer en masse les devis de tous les utilisateurs. REVOKE PUBLIC/anon + GRANT service_role, workflow GitHub sur un secret dédié.'},
+  {id:'d97', col:'done', etape:2, tags:['Back'],
+   title:'Intégration continue (CI) — ruff + pytest + tsc + build',
+   desc:'.github/workflows/ci.yml sur push/pull_request vers main. Aucun secret requis (vérifié empiriquement). Corrige au passage un bug bloquant le démarrage du backend (Settings rejetait toute variable .env non déclarée).'},
+  {id:'d98', col:'done', etape:2, tags:['Back','Front','BDD'],
+   title:'Signature électronique du devis par le client',
+   desc:'Page publique /devis/[token] (non authentifiée), token 256 bits généré à la demande, vue Pydantic filtrée (jamais IBAN/BIC/email). Accepter/refuser avec idempotence (statut envoyé requis).'},
+  {id:'d99', col:'done', etape:2, tags:['Front','PDF','Word'],
+   title:'Signature à main levée (canvas mobile) + rendu PDF/Word',
+   desc:'Canvas Pointer Events sur la page de signature publique, repli automatique sur le nom tapé si non dessinée. Image ou nom en italique dans le PDF/Word exporté. Date de signature formatée (JJ/MM/AAAA à HH:MM).'},
+  {id:'d100', col:'done', etape:2, tags:['Back','BDD'],
+   title:'Facture d\'acompte séparée + facture de solde liée automatiquement',
+   desc:'POST /documents/{id}/create-acompte : document facture à part, 1 ligne de synthèse, TVA au taux moyen pondéré. La conversion devis→facture détecte les acomptes déjà émis et déduit automatiquement le montant (facture de solde).'},
+  {id:'d101', col:'done', etape:2, tags:['Back','PDF','Word'],
+   title:'Retenue de garantie + TVA taux réduit + autoliquidation',
+   desc:'retenue_garantie_taux (plafond légal 5%), mentions légales automatiques pour la TVA 10%/5.5% travaux (art. 279-0 bis / 278-0 bis A CGI) et l\'autoliquidation sous-traitance (art. 283-2 nonies CGI, masque les autres mentions TVA incompatibles).'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 13 — Numérotation personnalisable (25 août 2026)
+  // ══════════════════════════════════════════════
+  {id:'d102', col:'done', etape:2, tags:['BDD','Back','Front'],
+   title:'Numérotation personnalisable par compte',
+   desc:'Préfixe, point de départ, inclusion de l\'année, padding configurables par type (devis/facture). Point de départ verrouillé côté backend dès qu\'un numéro a été attribué (409 sinon). Aperçu en direct du prochain numéro. Numéro légal toujours attribué exclusivement par la RPC atomique.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 14-15 — Corrections & confort, post-déploiement (25 août – 29 sept. 2026)
+  // ══════════════════════════════════════════════
+  {id:'d103', col:'done', etape:2, tags:['Front','Back','UX'],
+   title:'Corrections & confort (notif. signature, numéro provisoire, historique par onglets)',
+   desc:'Email automatique à l\'artisan quand le client signe (best-effort). Numéro provisoire affiché dès la génération (sans jamais toucher au numéro légal). Historique en onglets Devis/Facture. Nom/adresse/email client éditables dans l\'aperçu. Retour à l\'accueil réel via le logo.'},
+  {id:'d104', col:'done', etape:2, tags:['Bug','Front','Back'],
+   title:'Corrections post-déploiement (env vars, header mobile, numéro figé)',
+   desc:'3 incidents de production tous causés par des variables d\'environnement jamais configurées sur Render/Vercel (documentées dans CLAUDE.md pour que ça ne se reproduise plus en silence). Header responsive mobile. Numéro provisoire qui ne suivait pas la bascule Devis/Facture.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 16-18 — Revue de code + apurement dette technique (29 sept. – 30 sept. 2026)
+  // ══════════════════════════════════════════════
+  {id:'d105', col:'done', etape:2, tags:['Back','Front','Bug'],
+   title:'Revue de code complète (4 axes) + 4 corrections bloquantes',
+   desc:'Mélange de données entre documents dans QuotePreview (fix : remount via key). Transitions de statut jamais vérifiées côté serveur (fix : graphe _TRANSITIONS_AUTORISEES). Risque de double-facturation silencieuse dans convert_to_facture. Nouveau PUT /documents/{id} : les modifications faites après génération étaient perdues au retour depuis l\'historique.'},
+  {id:'d106', col:'done', etape:2, tags:['Back','Bug'],
+   title:'Apurement complet de la dette technique identifiée',
+   desc:'Bornes de validation (remise/acompte/retenue). Rate limiter : IP réelle derrière le proxy Render + fuite mémoire corrigée. 27 messages d\'erreur internes remplacés par un message générique + log serveur. Migration SQL rejouable. 37 nouveaux tests (125/125 au total).'},
+  {id:'d107', col:'done', etape:2, tags:['Back','Bug','Front'],
+   title:'CI backend cassé + acompte sans devis signé + sauvegarde à la navigation',
+   desc:'CI plantait à l\'import de claude_service.py (Settings requis absents en CI). Condition "devis signé" retirée sur la facture d\'acompte (trop restrictive). flushUpdateSave() : la modification en attente est désormais envoyée immédiatement en quittant l\'aperçu, au lieu d\'attendre le débounce de 900ms.'},
+
+  // ══════════════════════════════════════════════
+  //  FAIT — Batch 19 — Limite de taille gros devis & imports (1er oct. 2026)
+  // ══════════════════════════════════════════════
+  {id:'d108', col:'done', etape:2, tags:['IA','Back','Bug'],
+   title:'Fix limite bloquant les gros devis et les imports PDF/.docx volumineux',
+   desc:'max_tokens relevé de 8192/8000 à 64000 sur les 3 appels Claude (génération, import PDF, import .docx) — un chantier multi-lots ou un document importé volumineux finissait en erreur "trop volumineux". Les 3 appels passent en streaming (requis par le SDK au-delà d\'un certain max_tokens). Vérifié contre l\'API réelle, pas seulement mocké.'},
 
   // ══════════════════════════════════════════════
   //  À FAIRE — Étape 3

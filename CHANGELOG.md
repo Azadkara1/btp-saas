@@ -370,8 +370,11 @@ Saisie vocale (speech-to-text), vision IA (analyse plans/photos).
 - `ruff`/pytest (125/125) et `tsc`/build frontend clean.
 - **Limite de taille sur les gros devis et les imports PDF/.docx** : `claude_service.py` (génération) et `import_service.py` (import) plafonnaient `max_tokens` à 8192/8000 — largement insuffisant pour un devis de plusieurs dizaines de lignes (gros chantier), qui se terminait en erreur "document trop volumineux" (`stop_reason == "max_tokens"`, réponse tronquée donc JSON inexploitable). Plafond relevé à 64000 (le modèle `claude-sonnet-4-6` supporte jusqu'à 128K tokens de sortie) sur les 3 appels (`generate_quote`, `_extract_from_pdf`, `_extract_from_docx`). Un `max_tokens` aussi élevé sur un appel non-streamé peut déclencher un rejet côté SDK (requête estimée à plus de ~10 min) — les 3 appels sont passés en streaming (`client.messages.stream(...)` + `stream.get_final_message()`, même objet `Message` en retour, reste du code inchangé). Vérifié en conditions réelles (SDK `anthropic==0.28.0`, appel direct à l'API) : `max_tokens=64000` accepté, et un devis de 8 lots/22 lignes généré sans troncature (16 858 tokens, contre une troncature quasi certaine à l'ancien plafond).
 
-## Ce qui restait à faire — noté au 25 août 2026
+## Ce qui restait à faire — mis à jour au 1er octobre 2026
 
 | Priorité | Tâche | Détail |
 |---|---|---|
-| Haute | **Lot 5 — Stripe** | Abonnements Freemium/Pro, quotas devis/mois. |
+| Haute | **Lot 5 — Stripe** | Abonnements Freemium/Pro, quotas devis/mois. Remplacerait aussi le rate limiting en mémoire ci-dessous par un quota réel. |
+| Moyenne | **Rate limiter en mémoire (`quotes.py`)** | Ne survit ni à un redémarrage du process ni à plusieurs instances Render (chaque instance a son propre `_rate_store`). Fonctionne pour un seul artisan/une seule instance (cas actuel), mais ne protège plus vraiment contre l'abus une fois le service répliqué. À remplacer par un store partagé (Redis/Postgres) ou par les quotas Stripe. |
+| Moyenne | **Couverture de test manquante sur la boucle agentic Claude et l'orchestration d'import** | `claude_service.py::generate_quote()` (boucle Tool Use complète, y compris le passage en streaming du Batch 19) et `import_service.py::_extract_from_pdf/_extract_from_docx` n'ont toujours aucun test (nécessiterait de mocker `client.messages.stream`). Risque réel : une régression sur ces deux chemins ne serait détectée qu'en production. |
+| Basse | **Étape 3 — Mobile & Vision** | Saisie vocale (speech-to-text), vision IA (analyse de plans/photos → chiffrage). Non démarré, roadmap long terme. |
