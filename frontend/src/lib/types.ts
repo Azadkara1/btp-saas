@@ -335,3 +335,34 @@ export interface DashboardStats {
   ca_par_mois: CaMoisPoint[];
   top_prestations: TopPrestation[];
 }
+
+// ── Calendrier (Batch 20) ─────────────────────────────────────────
+export interface Evenement {
+  id: string;
+  titre: string;
+  description?: string | null;
+  date_debut: string; // ISO 8601
+  date_fin: string;   // ISO 8601
+  toute_la_journee: boolean;
+  cree_par: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EvenementCreate {
+  titre: string;
+  description?: string | null;
+  date_debut: string;
+  date_fin: string;
+  toute_la_journee: boolean;
+  cree_par: string;
+}
+
+export interface EvenementUpdate {
+  titre?: string;
+  description?: string | null;
+  date_debut?: string;
+  date_fin?: string;
+  toute_la_journee?: boolean;
+  cree_par?: string;
+}

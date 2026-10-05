@@ -15,6 +15,7 @@
 - **Batch 17** ✅ : apurement complet de la dette technique identifiée au Batch 16 — validation Pydantic (bornes remise/acompte/retenue), fuite de police PDF pagination, `convert_to_facture` exige un devis signé, boutons de statut non désactivés, migration SQL rejouable, rate limiter (IP réelle derrière le proxy + fuite mémoire), 27 messages d'erreur bruts assainis, couverture de tests élargie (numéro légal RPC, clients, dashboard, email, storage, rate limiter, parité des injections artisan). **125/125 tests.**
 - **Batch 18** ✅ : CI backend cassé (import de `claude_service.py` au niveau module → `get_settings()` échoue sans secrets CI, valeurs factices ajoutées à `ci.yml`), retrait de la condition "devis signé" sur `create-acompte` (trop restrictive, jamais demandée telle quelle), `flushUpdateSave()` pour éliminer la fenêtre de course où naviguer vers Historique/Clients juste après une frappe pouvait rouvrir le document avant l'envoi du `PUT` débattu.
 - **Batch 19** ✅ : `MAX_OUTPUT_TOKENS` (génération ET import PDF/.docx) relevé de 8192/8000 à 64000 — un gros devis (chantier multi-lots) ou un document importé volumineux se terminait en erreur "trop volumineux" (réponse Claude tronquée). Les 3 appels concernés passent en streaming (`client.messages.stream()` + `get_final_message()`) car le SDK refuse un `max_tokens` aussi élevé sur une requête non-streamée. Vérifié en conditions réelles contre l'API (pas seulement mocké) : devis 8 lots/22 lignes généré sans troncature.
+- **Batch 20** ✅ : Calendrier partagé au sein d'un compte — nouvelle table `evenements` (pas de RLS, cohérent avec le reste du projet), CRUD `/evenements` filtré par `user_id`, `CalendrierView.tsx` (vues Mois/Semaine/Jour via `date-fns`, couleur déterministe par créateur, modale création/édition/suppression en bottom-sheet mobile). Suppression = DELETE physique (pas de donnée légale à tracer).
 - **Étape 3 (Mobile & Vision)** — non commencée (saisie vocale, vision IA plans/photos).
 
 ---
@@ -45,6 +46,7 @@ et produit un document PDF + Word prêt à envoyer au client.
 | BDD | Supabase (Postgres managé) | 3 tables avec RLS — Lot 2 : persistance |
 | Auth | Supabase Auth | JWT asymétrique ES256/RS256 via JWKS, cookie SSR, `PyJWT[crypto]` |
 | Graphiques | recharts | Dashboard — BarChart CA/mois, PieChart statuts |
+| Dates | date-fns | Calendrier (Batch 20) — calculs mois/semaine/jour, locale fr |
 
 ---
 
@@ -176,7 +178,9 @@ backend/app/
 │   │                    #   AcceptSignatureRequest, PublicActionResponse (Batch 12 T3)
 │   ├── pdf.py            # PdfRequest — devis + signature_nom_signataire/image/date (métadonnées
 │   │                    #   document, jamais dans Devis)
-│   └── dashboard.py     # DashboardStats, CaMoisPoint, TopPrestation
+│   ├── dashboard.py     # DashboardStats, CaMoisPoint, TopPrestation
+│   └── evenement.py     # Evenement, EvenementCreate, EvenementUpdate (Batch 20 — Calendrier)
+│                        #   validation fin >= début (model_validator), pas de lien avec Devis
 ├── routers/
 │   ├── quotes.py        # POST /quotes/generate  +  POST /quotes/import
 │   ├── pdf.py           # POST /pdf/export
@@ -208,8 +212,11 @@ backend/app/
 │   ├── clients.py       # GET /clients (nb docs + CA total, agrégés en Python)
 │   │                    #   GET /clients/{id} (fiche + historique) — PUT /clients/{id}
 │   │                    #   Filtrage user_id obligatoire
-│   └── dashboard.py     # GET /dashboard/stats → appelle la RPC get_dashboard_stats
-│                        #   (agrégation 100% SQL, jamais de boucle Python)
+│   ├── dashboard.py     # GET /dashboard/stats → appelle la RPC get_dashboard_stats
+│   │                    #   (agrégation 100% SQL, jamais de boucle Python)
+│   └── evenements.py    # GET /evenements?debut&fin (chevauchement de plage), POST, PUT, DELETE
+│                        #   (Batch 20) — DELETE physique (pas de donnée légale), filtrage
+│                        #   user_id obligatoire, PAS de RLS sur la table (cf. pièges)
 └── services/
     ├── claude_service.py  # Orchestration API Anthropic + boucle Tool Use agentic
     │                      #   ⚠️ Injection POST-GÉNÉRATION (jamais envoyé à Claude) :
@@ -268,7 +275,7 @@ frontend/src/
 │   ├── page.tsx         # Chef d'orchestre : états result (Devis|null), documentType,
 │   │                    #   withTva, documentDate, modele ("moderne"|"pro")
 │   │                    #   userEmail + handleLogout
-│   │                    #   activeView: "form"|"historique"|"clients"|"dashboard"
+│   │                    #   activeView: "form"|"historique"|"clients"|"dashboard"|"calendrier"
 │   │                    #   STATUT_BADGE + STATUT_TRANSITIONS (non exportés — un export
 │   │                    #     nommé depuis un fichier page.tsx casse le typing Next.js)
 │   │                    #   handleChangeStatut(), handleConvertToFacture(),
@@ -346,8 +353,13 @@ frontend/src/
 │   │                         #   Clic → getDocument(id) → onOpen → QuotePreview
 │   ├── ClientsView.tsx      # Liste triable (nom/CA/nb documents), fiche client éditable,
 │   │                         #   historique cliquable — onOpenDocument même callback que HistoriqueView
-│   └── DashboardView.tsx    # KPI (StatTile) + recharts — BarChart CA/mois + PieChart statuts
-│                             #   (labels directs sur chaque part, cf. skill dataviz)
+│   ├── DashboardView.tsx    # KPI (StatTile) + recharts — BarChart CA/mois + PieChart statuts
+│   │                         #   (labels directs sur chaque part, cf. skill dataviz)
+│   └── CalendrierView.tsx   # Batch 20 — vues Mois/Semaine/Jour (date-fns, locale fr), couleur
+│                             #   déterministe par `cree_par` (hash → palette fixe), modale
+│                             #   création/édition/suppression en bottom-sheet mobile.
+│                             #   Suggestions de créateurs + dernier utilisé : localStorage
+│                             #   uniquement (pas d'endpoint dédié), lu en useEffect (piège SSR)
 │
 └── lib/
     ├── api.ts           # generateQuote, importQuote, exportToPdf, exportToWord (avec signature?)
@@ -357,6 +369,8 @@ frontend/src/
     │                    #   convertToFacture(id), duplicateDocument(id), createAcompte(id, pct)
     │                    #   listClients(), getClient(id), updateClient(id, upd)
     │                    #   getDashboardStats()
+    │                    #   listEvenements(debut, fin), createEvenement, updateEvenement,
+    │                    #     deleteEvenement (Batch 20)
     │                    #   getSignatureLink(id), getPublicDevis(token), acceptPublicDevis(),
     │                    #     refusePublicDevis() — ⚠️ pas de authHeader() sur ces 3 dernières
     │                    #     (routes publiques volontairement non authentifiées)
@@ -466,6 +480,9 @@ frontend/src/
 | **IP réelle du visiteur derrière un proxy (Render)** | `req.client.host` reflète l'IP interne du proxy pour toutes les requêtes en production — jamais l'IP du visiteur. Toute logique par-IP (rate limiting, logs, géolocalisation future) doit lire `X-Forwarded-For` en premier (`routers/quotes.py::_get_client_ip`), avec repli sur `req.client.host` seulement si l'en-tête est absent (utile en local/tests). Ne faire confiance à cet en-tête que parce qu'on est nous-mêmes derrière un proxy connu — jamais pour un contrôle de sécurité critique. |
 | **`max_tokens` élevé ⇒ appel Claude obligatoirement en streaming** | Le SDK Anthropic refuse une requête non-streamée dont le `max_tokens` est estimé dépasser ~10 min (la connexion HTTP resterait ouverte trop longtemps sans rien recevoir). `claude_service.py::generate_quote()` et `import_service.py::_extract_from_pdf/_extract_from_docx` passent tous les trois par `client.messages.stream(...)` + `stream.get_final_message()` (même objet `Message` en retour qu'un `.create()` non-streamé, donc le reste du code — `response.stop_reason`, `.usage`, `.content` — ne change pas). Tout nouvel appel Claude avec un `max_tokens` généreux doit suivre le même pattern dès le départ plutôt que de découvrir l'erreur en production. |
 | **Extraire une fonction juste pour la rendre testable est justifié ici** | `claude_service.py::_inject_post_generation()` et `import_service.py::_inject_artisan()` sont volontairement deux fonctions **pures** séparées (mutent et retournent/modifient un `Devis` à partir d'un `QuoteRequest`), plutôt que du code inline dans `generate_quote()`/`import_quote()` — ça permet de les tester sans jamais appeler l'API Anthropic. `tests/test_injection_post_generation.py` inclut un test de **parité automatisée** entre les deux : si un futur champ `artisan_*` est ajouté à l'une sans l'autre, le test échoue au lieu de compter sur une relecture manuelle du piège documenté plus haut ("Deux points d'injection..."). |
+| **Table `evenements` sans RLS — cohérent avec le reste du projet, pas un oubli** | Aucune table de ce projet (`documents`, `clients`, `entreprises`, `evenements`) n'a de policy RLS Postgres — vérifié avant le Batch 20. La sécurité repose entièrement sur le filtrage `user_id` fait manuellement dans chaque requête du client `service_role` (backend). Si une future table a besoin de RLS (ex. accès direct depuis le frontend sans passer par le backend), ce serait la première du projet — à faire consciemment, pas par réflexe. |
+| **"Partagé au sein d'un compte" = un seul `user_id`, pas du multi-utilisateur réel** | Le Calendrier (Batch 20) est partagé entre associés qui utilisent le **même compte/login** Supabase (un seul `user_id`) — `cree_par` est un champ texte libre saisi à la main, pas un lien vers un compte utilisateur distinct. Ce projet n'a pas de notion de plusieurs comptes liés à une même entreprise ; si ça devient un besoin réel, c'est un changement d'architecture (table `membres`/invitations), pas une évolution mineure de `evenements`. |
+| **Suggestions "créateurs connus" en `localStorage`, pas en base** | `CalendrierView.tsx` mémorise le dernier `cree_par` utilisé et une liste des noms déjà saisis (`calendrier_dernier_createur`/`calendrier_createurs_connus`) uniquement dans le navigateur — pas d'endpoint backend dédié. Limite assumée : les suggestions sont par appareil/navigateur, pas partagées entre les associés qui utilisent le même compte depuis des postes différents. Lu en `useEffect` uniquement, jamais dans un `useState` lazy initializer (même piège SSR que `artisan_profile`). |
 
 ---
 

@@ -12,6 +12,7 @@ from app.routers.documents import router as documents_router
 from app.routers.clients import router as clients_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.public import router as public_router
+from app.routers.evenements import router as evenements_router
 
 settings = get_settings()
 
@@ -47,6 +48,7 @@ app.include_router(documents_router, prefix="/documents", tags=["documents"])
 app.include_router(clients_router, prefix="/clients", tags=["clients"])
 app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(public_router, prefix="/public", tags=["public"])  # ⚠️ aucune route ici n'est authentifiée
+app.include_router(evenements_router, prefix="/evenements", tags=["evenements"])
 
 
 @app.get("/")

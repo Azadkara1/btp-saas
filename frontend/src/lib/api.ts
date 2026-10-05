@@ -2,7 +2,7 @@
  * Client API — toutes les fonctions d'appel au backend FastAPI.
  * Centralisé ici pour faciliter l'ajout d'auth (Étape 2) et le mock en tests.
  */
-import { QuoteRequest, QuoteResponse, Devis, ProfileEntreprise, NumerotationStatus, DocumentCreate, DocumentSummary, DocumentDetail, StatusPatchResponse, StatutDocument, ClientSummary, ClientDetail, ClientUpdate, DashboardStats, SendEmailRequest, SendEmailResponse, PublicDevisView, SignatureLinkResponse } from "./types";
+import { QuoteRequest, QuoteResponse, Devis, ProfileEntreprise, NumerotationStatus, DocumentCreate, DocumentSummary, DocumentDetail, StatusPatchResponse, StatutDocument, ClientSummary, ClientDetail, ClientUpdate, DashboardStats, SendEmailRequest, SendEmailResponse, PublicDevisView, SignatureLinkResponse, Evenement, EvenementCreate, EvenementUpdate } from "./types";
 import { createClient } from "./supabase-client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -435,4 +435,53 @@ export async function refusePublicDevis(token: string): Promise<{ statut: string
     throw new Error(detail?.detail ?? `HTTP ${response.status}`);
   }
   return response.json();
+}
+
+// ── Calendrier (Batch 20) ─────────────────────────────────────────
+
+export async function listEvenements(debut: string, fin: string): Promise<Evenement[]> {
+  const params = new URLSearchParams({ debut, fin });
+  const response = await fetch(`${API_URL}/evenements?${params}`, {
+    method: "GET",
+    headers: { ...await authHeader() },
+  });
+  if (!response.ok) throw new Error(`Erreur ${response.status}`);
+  return response.json();
+}
+
+export async function createEvenement(evenement: EvenementCreate): Promise<Evenement> {
+  const response = await fetch(`${API_URL}/evenements`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...await authHeader() },
+    body: JSON.stringify(evenement),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function updateEvenement(id: string, update: EvenementUpdate): Promise<Evenement> {
+  const response = await fetch(`${API_URL}/evenements/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...await authHeader() },
+    body: JSON.stringify(update),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function deleteEvenement(id: string): Promise<void> {
+  const response = await fetch(`${API_URL}/evenements/${id}`, {
+    method: "DELETE",
+    headers: { ...await authHeader() },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail ?? `HTTP ${response.status}`);
+  }
 }
