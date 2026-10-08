@@ -6,6 +6,8 @@
 
 export type SourcePrix = "artisan" | "recherche_marche" | "estimation";
 
+export type StatutJuridique = "societe" | "auto_entrepreneur";
+
 export interface LigneDevis {
   lot?: string | null;
   poste: string;
@@ -40,6 +42,9 @@ export interface ArtisanInfo {
   assurance_nom?: string | null;
   assurance_contrat?: string | null;
   assurance_couverture?: string | null;
+  statut_juridique?: StatutJuridique | null;
+  forme_juridique?: string | null;
+  capital_social?: number | null;
 }
 
 export interface ChantierInfo {
@@ -93,6 +98,9 @@ export interface ProfileEntreprise {
   assurance_nom?: string | null;
   assurance_contrat?: string | null;
   assurance_couverture?: string | null;
+  statut_juridique: StatutJuridique;
+  forme_juridique?: string | null;
+  capital_social?: number | null;
   modele_prefere: string;
   // Numérotation personnalisable par compte (Batch 13 T2)
   devis_numero_debut: number;
@@ -153,6 +161,9 @@ export interface QuoteRequest {
   artisan_assurance_nom?: string;
   artisan_assurance_contrat?: string;
   artisan_assurance_couverture?: string;
+  artisan_statut_juridique?: StatutJuridique;
+  artisan_forme_juridique?: string;
+  artisan_capital_social?: number;
   artisan_adresse?: string;
   artisan_code_postal?: string;
   artisan_ville?: string;
@@ -259,6 +270,9 @@ export interface PublicArtisanInfo {
   assurance_nom?: string | null;
   assurance_contrat?: string | null;
   assurance_couverture?: string | null;
+  statut_juridique?: StatutJuridique | null;
+  forme_juridique?: string | null;
+  capital_social?: number | null;
 }
 
 export interface PublicClientInfo {

@@ -162,9 +162,25 @@ def generate_quote_pdf(
         except Exception:
             has_logo = False
 
+    # Mention forme juridique + capital social (sociétés uniquement) — mention
+    # légale obligatoire distincte du SIRET. None si auto-entrepreneur (pas de
+    # capital social) ou si statut_juridique absent (devis antérieurs à Batch 21,
+    # rétrocompatible : pas de ligne ajoutée).
+    forme_capital_line = None
+    if devis.artisan.statut_juridique == "societe":
+        forme = devis.artisan.forme_juridique
+        capital = devis.artisan.capital_social
+        if forme and capital is not None:
+            forme_capital_line = f"{forme} au capital de {_fmt_money(capital)}"
+        elif forme:
+            forme_capital_line = forme
+        elif capital is not None:
+            forme_capital_line = f"Capital social : {_fmt_money(capital)}"
+
     # Calcul de la hauteur header (pour le bandeau moderne)
     artisan_info_lines = [
         devis.artisan.siret,
+        forme_capital_line,
         devis.artisan.adresse,
         " ".join(filter(None, [devis.artisan.code_postal, devis.artisan.ville])) or None,
         devis.artisan.telephone,
@@ -210,7 +226,10 @@ def generate_quote_pdf(
         pdf.set_text_color(*P_ANTHRACITE)
     else:
         _set_white()
-    pdf.cell(text_w, 7, _safe(devis.artisan.nom or "Votre Entreprise"), border=0)
+    nom_affiche = devis.artisan.nom or "Votre Entreprise"
+    if devis.artisan.statut_juridique == "auto_entrepreneur":
+        nom_affiche = f"{nom_affiche} (EI)"
+    pdf.cell(text_w, 7, _safe(nom_affiche), border=0)
     left_y += 8
 
     # Infos artisan
@@ -222,6 +241,7 @@ def generate_quote_pdf(
 
     info_pairs = [
         (f"SIRET : {devis.artisan.siret}",        devis.artisan.siret),
+        (forme_capital_line,                      forme_capital_line),
         (f"Adresse : {devis.artisan.adresse}",    devis.artisan.adresse),
         (" ".join(filter(None, [devis.artisan.code_postal, devis.artisan.ville])),
          devis.artisan.code_postal or devis.artisan.ville),

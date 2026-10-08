@@ -256,10 +256,28 @@ def generate_quote_docx(
         p_name = lc.paragraphs[0]
 
     _zero_para_spacing(p_name)
-    _run(p_name, devis.artisan.nom or "Votre Entreprise", size=14, color=COL_HEADER, bold=True)
+    nom_affiche = devis.artisan.nom or "Votre Entreprise"
+    if devis.artisan.statut_juridique == "auto_entrepreneur":
+        nom_affiche = f"{nom_affiche} (EI)"
+    _run(p_name, nom_affiche, size=14, color=COL_HEADER, bold=True)
+
+    # Mention forme juridique + capital social (sociétés uniquement) — même
+    # logique que pdf_service.py. None si auto-entrepreneur ou statut_juridique
+    # absent (rétrocompatible : pas de ligne ajoutée).
+    forme_capital_line = None
+    if devis.artisan.statut_juridique == "societe":
+        forme = devis.artisan.forme_juridique
+        capital = devis.artisan.capital_social
+        if forme and capital is not None:
+            forme_capital_line = f"{forme} au capital de {_fmt_money(capital)}"
+        elif forme:
+            forme_capital_line = forme
+        elif capital is not None:
+            forme_capital_line = f"Capital social : {_fmt_money(capital)}"
 
     artisan_lines = [
         f"SIRET : {devis.artisan.siret}"   if devis.artisan.siret   else None,
+        forme_capital_line,
         f"Adresse : {devis.artisan.adresse}" if devis.artisan.adresse else None,
         " ".join(filter(None, [devis.artisan.code_postal, devis.artisan.ville])) or None,
         f"Tel : {devis.artisan.telephone}" if devis.artisan.telephone else None,

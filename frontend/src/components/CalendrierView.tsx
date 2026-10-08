@@ -30,6 +30,14 @@ function capFirst(s: string): string {
   return s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
+// 3 premiers mots de la description (aperçu dans la case du calendrier) +
+// indicateur s'il reste du texte à voir au clic.
+function apercuDescription(description: string | null | undefined, n = 3): { extrait: string; tronque: boolean } {
+  if (!description) return { extrait: "", tronque: false };
+  const mots = description.trim().split(/\s+/);
+  return { extrait: mots.slice(0, n).join(" "), tronque: mots.length > n };
+}
+
 function toDateInputValue(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -53,6 +61,7 @@ export default function CalendrierView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [modalState, setModalState] = useState<{ event?: Evenement; defaultDate: Date } | null>(null);
   const [lastCreateur, setLastCreateur] = useState("");
   const [createeursConnus, setCreateeursConnus] = useState<string[]>([]);
@@ -206,21 +215,70 @@ export default function CalendrierView() {
                 const dayEvents = eventsForDay(day);
                 const inMonth = isSameMonth(day, anchor);
                 const selected = selectedDay && isSameDay(day, selectedDay);
+                const MAX_VISIBLE = 3;
+                const visibleEvents = dayEvents.slice(0, MAX_VISIBLE);
+                const overflowCount = dayEvents.length - visibleEvents.length;
                 return (
-                  <button key={day.toISOString()} onClick={() => setSelectedDay(day)}
-                    className="aspect-square rounded-xl flex flex-col items-center justify-start p-1 pt-1.5 gap-1 transition-colors"
+                  <div key={day.toISOString()}
+                    role="button" tabIndex={0}
+                    onClick={() => setSelectedDay(day)}
+                    onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setSelectedDay(day); }}
+                    className="min-h-[88px] sm:min-h-[104px] rounded-xl flex flex-col items-stretch justify-start p-1 pt-1 gap-0.5 transition-colors text-left overflow-hidden cursor-pointer"
                     style={{
                       backgroundColor: selected ? "#E3EDE6" : "white",
                       border: isToday(day) ? "1.5px solid #14532D" : "0.5px solid rgba(20,83,45,0.1)",
                       opacity: inMonth ? 1 : 0.4,
                     }}>
-                    <span className="text-xs font-medium" style={{ color: "#18211C" }}>{format(day, "d")}</span>
-                    <div className="flex gap-0.5 flex-wrap justify-center">
-                      {dayEvents.slice(0, 4).map(e => (
-                        <span key={e.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: colorForCreateur(e.cree_par) }} />
-                      ))}
+                    <span className="text-xs font-medium px-0.5" style={{ color: "#18211C" }}>{format(day, "d")}</span>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      {visibleEvents.map(e => {
+                        const isExpanded = expandedEventId === e.id;
+                        const { extrait, tronque } = apercuDescription(e.description);
+                        return (
+                          <div key={e.id}
+                            role="button" tabIndex={0}
+                            onClick={ev => { ev.stopPropagation(); setExpandedEventId(isExpanded ? null : e.id); }}
+                            onKeyDown={ev => { if (ev.key === "Enter" || ev.key === " ") { ev.stopPropagation(); setExpandedEventId(isExpanded ? null : e.id); } }}
+                            className="rounded px-1 py-0.5 min-w-0 cursor-pointer"
+                            style={{ backgroundColor: "rgba(20,83,45,0.06)" }}>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: colorForCreateur(e.cree_par) }} />
+                              <span className="text-[10px] sm:text-[11px] leading-tight font-semibold truncate" style={{ color: "#18211C" }}>
+                                {e.titre}
+                              </span>
+                            </div>
+                            {!isExpanded && (extrait || e.cree_par) && (
+                              <p className="text-[9px] sm:text-[10px] leading-tight truncate pl-2.5" style={{ color: "#7C857F" }}>
+                                {extrait}{tronque ? "…" : ""}{extrait ? " · " : ""}{e.cree_par}
+                              </p>
+                            )}
+                            {isExpanded && (
+                              <div className="pl-2.5 pt-0.5 space-y-0.5">
+                                {e.description && (
+                                  <p className="text-[9px] sm:text-[10px] leading-snug whitespace-pre-wrap break-words" style={{ color: "#18211C" }}>
+                                    {e.description}
+                                  </p>
+                                )}
+                                <p className="text-[9px]" style={{ color: "#7C857F" }}>
+                                  {e.toute_la_journee ? "Toute la journée" : `${format(parseISO(e.date_debut), "HH:mm")} – ${format(parseISO(e.date_fin), "HH:mm")}`}
+                                  {" · "}{e.cree_par}
+                                </p>
+                                <button type="button" onClick={ev => { ev.stopPropagation(); openEditModal(e); }}
+                                  className="text-[9px] font-medium underline" style={{ color: "#14532D" }}>
+                                  Modifier
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {overflowCount > 0 && (
+                        <span className="text-[10px] px-1" style={{ color: "#7C857F" }}>
+                          +{overflowCount} autre{overflowCount > 1 ? "s" : ""}
+                        </span>
+                      )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -304,6 +362,23 @@ function EvenementModal({ event, defaultDate, createeursConnus, lastCreateur, on
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // La date de fin suit la date de début pour garder le même nombre de
+  // jours d'écart (ex. début 08/10 → fin 08/10, on passe le début à
+  // 10/10 : la fin doit suivre à 10/10, pas rester bloquée sur 08/10).
+  const handleDateDebutChange = (newVal: string) => {
+    const oldDebut = new Date(`${dateDebut}T00:00:00`);
+    const newDebut = new Date(`${newVal}T00:00:00`);
+    const diffJours = Math.round((newDebut.getTime() - oldDebut.getTime()) / 86400000);
+    setDateDebut(newVal);
+    if (diffJours !== 0) {
+      setDateFin(prevFin => {
+        const finDate = new Date(`${prevFin}T00:00:00`);
+        finDate.setDate(finDate.getDate() + diffJours);
+        return toDateInputValue(finDate);
+      });
+    }
+  };
+
   const handleSubmit = async () => {
     if (!titre.trim()) { setError("Le titre est obligatoire."); return; }
     if (!creePar.trim()) { setError("Le nom du créateur (\"Créé par\") est obligatoire."); return; }
@@ -383,7 +458,7 @@ function EvenementModal({ event, defaultDate, createeursConnus, lastCreateur, on
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#5A635D" }}>Début</label>
-            <input type="date" value={dateDebut} onChange={e => setDateDebut(e.target.value)} className="input-field text-sm" disabled={saving} />
+            <input type="date" value={dateDebut} onChange={e => handleDateDebutChange(e.target.value)} className="input-field text-sm" disabled={saving} />
             {!touteLaJournee && (
               <input type="time" value={heureDebut} onChange={e => setHeureDebut(e.target.value)} className="input-field text-sm mt-1.5" disabled={saving} />
             )}

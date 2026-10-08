@@ -4,7 +4,7 @@ Source de vérité pour la validation entrée/sortie de l'API.
 Ces modèles seront réutilisés à l'Étape 2 pour la persistance BDD.
 """
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Literal, Optional, List
 from enum import Enum
 
 
@@ -61,6 +61,11 @@ class ArtisanInfo(BaseModel):
     assurance_nom: Optional[str] = None          # mention obligatoire BTP : nom de l'assureur RC Pro / décennale
     assurance_contrat: Optional[str] = None       # n° de contrat
     assurance_couverture: Optional[str] = None    # zone géographique couverte
+    # Statut juridique (Batch 21) — None = rétrocompatible, aucune mention ajoutée au PDF/Word.
+    # "societe" affiche forme_juridique/capital_social ; "auto_entrepreneur" ajoute le suffixe "(EI)".
+    statut_juridique: Optional[Literal["societe", "auto_entrepreneur"]] = None
+    forme_juridique: Optional[str] = None         # ex: SARL, SASU, EURL... — sociétés uniquement
+    capital_social: Optional[float] = Field(None, ge=0)  # sociétés uniquement
 
 
 class ChantierInfo(BaseModel):
@@ -130,6 +135,9 @@ class QuoteRequest(BaseModel):
     artisan_assurance_nom: Optional[str] = None
     artisan_assurance_contrat: Optional[str] = None
     artisan_assurance_couverture: Optional[str] = None
+    artisan_statut_juridique: Optional[Literal["societe", "auto_entrepreneur"]] = None
+    artisan_forme_juridique: Optional[str] = None
+    artisan_capital_social: Optional[float] = Field(None, ge=0)
     artisan_adresse: Optional[str] = None
     artisan_code_postal: Optional[str] = None
     artisan_ville: Optional[str] = None

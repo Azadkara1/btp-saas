@@ -232,6 +232,9 @@ def _inject_artisan(devis: Devis, request: QuoteRequest) -> None:
     if request.artisan_assurance_nom:         a.assurance_nom         = request.artisan_assurance_nom
     if request.artisan_assurance_contrat:     a.assurance_contrat     = request.artisan_assurance_contrat
     if request.artisan_assurance_couverture:  a.assurance_couverture  = request.artisan_assurance_couverture
+    if request.artisan_statut_juridique:      a.statut_juridique      = request.artisan_statut_juridique
+    if request.artisan_forme_juridique:       a.forme_juridique       = request.artisan_forme_juridique
+    if request.artisan_capital_social is not None: a.capital_social   = request.artisan_capital_social
     if request.artisan_adresse:     a.adresse     = request.artisan_adresse
     if request.artisan_code_postal: a.code_postal = request.artisan_code_postal
     if request.artisan_ville:       a.ville       = request.artisan_ville

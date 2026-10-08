@@ -134,6 +134,7 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
     region: "Rhône-Alpes",
     artisan_nom: "", artisan_siret: "", artisan_iban: "", artisan_bic: "",
     artisan_assurance_nom: "", artisan_assurance_contrat: "", artisan_assurance_couverture: "",
+    artisan_statut_juridique: "societe", artisan_forme_juridique: "",
     artisan_adresse: "", artisan_code_postal: "", artisan_ville: "",
     artisan_telephone: "", artisan_email: "", artisan_site_web: "",
     artisan_logo_base64: "",
@@ -199,7 +200,11 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
             artisan_assurance_nom:         profile.assurance_nom         ?? "",
             artisan_assurance_contrat:     profile.assurance_contrat     ?? "",
             artisan_assurance_couverture:  profile.assurance_couverture  ?? "",
+            artisan_statut_juridique:      profile.statut_juridique      ?? "societe",
+            artisan_forme_juridique:       profile.forme_juridique       ?? "",
+            artisan_capital_social:        profile.capital_social        ?? undefined,
           }));
+          setFormeJuridiqueAutre(!!profile.forme_juridique && !FORME_JURIDIQUE_OPTIONS.includes(profile.forme_juridique));
           setHasStoredProfile(!!(profile.nom || profile.siret));
           if (profile.modele_prefere && onModeleLoaded) {
             onModeleLoaded(profile.modele_prefere);
@@ -254,6 +259,9 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
       artisan_assurance_nom: form.artisan_assurance_nom,
       artisan_assurance_contrat: form.artisan_assurance_contrat,
       artisan_assurance_couverture: form.artisan_assurance_couverture,
+      artisan_statut_juridique: form.artisan_statut_juridique,
+      artisan_forme_juridique: form.artisan_forme_juridique,
+      artisan_capital_social: form.artisan_capital_social,
       artisan_adresse: form.artisan_adresse,
       artisan_code_postal: form.artisan_code_postal,
       artisan_ville: form.artisan_ville,
@@ -266,6 +274,7 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
   }, [
     form.artisan_nom, form.artisan_siret, form.artisan_iban, form.artisan_bic,
     form.artisan_assurance_nom, form.artisan_assurance_contrat, form.artisan_assurance_couverture,
+    form.artisan_statut_juridique, form.artisan_forme_juridique, form.artisan_capital_social,
     form.artisan_adresse, form.artisan_code_postal, form.artisan_ville,
     form.artisan_telephone, form.artisan_email, form.artisan_site_web,
     form.artisan_logo_base64,
@@ -334,6 +343,9 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
         assurance_nom:         form.artisan_assurance_nom         || null,
         assurance_contrat:     form.artisan_assurance_contrat     || null,
         assurance_couverture:  form.artisan_assurance_couverture  || null,
+        statut_juridique:      form.artisan_statut_juridique      || "societe",
+        forme_juridique:       form.artisan_forme_juridique        || null,
+        capital_social:        form.artisan_capital_social        ?? null,
         modele_prefere: modeleFromPage || "moderne",
         ...numerotation,
       };
@@ -362,6 +374,10 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
     } catch {}
     setShowMigrationBanner(false);
   };
+
+  // ── Statut juridique (Batch 21) ──────────────────────────────────
+  const FORME_JURIDIQUE_OPTIONS = ["SARL", "SASU", "EURL", "SAS", "SA", "SNC"];
+  const [formeJuridiqueAutre, setFormeJuridiqueAutre] = useState(false);
 
   const [prixList, setPrixList] = useState<PrixArtisan[]>([]);
   const [newPrix, setNewPrix] = useState<PrixArtisan>({ ...EMPTY_PRIX });
@@ -569,6 +585,45 @@ export default function QuoteForm({ onQuoteGenerated, modele: modeleFromPage, do
             <input name="artisan_siret" value={form.artisan_siret} onChange={handleChange}
               placeholder="14 chiffres" className="input-field" />
           </Field>
+          <Field label="Statut juridique">
+            <select name="artisan_statut_juridique" value={form.artisan_statut_juridique ?? "societe"}
+              onChange={handleChange} className="input-field">
+              <option value="societe">Société</option>
+              <option value="auto_entrepreneur">Auto-entrepreneur</option>
+            </select>
+          </Field>
+          {(form.artisan_statut_juridique ?? "societe") === "societe" && (
+            <>
+              <Field label="Forme juridique">
+                <select
+                  value={formeJuridiqueAutre ? "Autre" : (form.artisan_forme_juridique ?? "")}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === "Autre") {
+                      setFormeJuridiqueAutre(true);
+                      setForm(prev => ({ ...prev, artisan_forme_juridique: "" }));
+                    } else {
+                      setFormeJuridiqueAutre(false);
+                      setForm(prev => ({ ...prev, artisan_forme_juridique: val }));
+                    }
+                  }}
+                  className="input-field">
+                  <option value="">—</option>
+                  {FORME_JURIDIQUE_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                  <option value="Autre">Autre</option>
+                </select>
+                {formeJuridiqueAutre && (
+                  <input name="artisan_forme_juridique" value={form.artisan_forme_juridique ?? ""} onChange={handleChange}
+                    placeholder="Précisez (ex : SCI, SELARL...)" className="input-field mt-2" />
+                )}
+              </Field>
+              <Field label="Capital social (€)">
+                <input type="number" min="0" value={form.artisan_capital_social ?? ""}
+                  onChange={e => setForm(prev => ({ ...prev, artisan_capital_social: parseFloat(e.target.value) || undefined }))}
+                  placeholder="Ex : 10000" className="input-field" />
+              </Field>
+            </>
+          )}
           <Field label="Adresse">
             <input name="artisan_adresse" value={form.artisan_adresse} onChange={handleChange}
               placeholder="15 rue des Artisans" className="input-field" />

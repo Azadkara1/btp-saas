@@ -31,6 +31,9 @@ def test_inject_post_generation_champs_artisan():
         artisan_assurance_nom="MAAF",
         artisan_assurance_contrat="123456",
         artisan_assurance_couverture="France entière",
+        artisan_statut_juridique="societe",
+        artisan_forme_juridique="SARL",
+        artisan_capital_social=10000.0,
         artisan_adresse="1 rue du Chantier",
         artisan_code_postal="69001",
         artisan_ville="Lyon",
@@ -47,6 +50,9 @@ def test_inject_post_generation_champs_artisan():
     assert updated.artisan.assurance_nom == "MAAF"
     assert updated.artisan.assurance_contrat == "123456"
     assert updated.artisan.assurance_couverture == "France entière"
+    assert updated.artisan.statut_juridique == "societe"
+    assert updated.artisan.forme_juridique == "SARL"
+    assert updated.artisan.capital_social == 10000.0
     assert updated.artisan.adresse == "1 rue du Chantier"
     assert updated.artisan.code_postal == "69001"
     assert updated.artisan.ville == "Lyon"
@@ -121,6 +127,9 @@ def test_inject_artisan_champs_partages_avec_claude_service():
         artisan_assurance_nom="MAAF",
         artisan_assurance_contrat="123456",
         artisan_assurance_couverture="France entière",
+        artisan_statut_juridique="societe",
+        artisan_forme_juridique="SARL",
+        artisan_capital_social=10000.0,
         artisan_adresse="1 rue du Chantier",
         artisan_code_postal="69001",
         artisan_ville="Lyon",
@@ -137,6 +146,7 @@ def test_inject_artisan_champs_partages_avec_claude_service():
 
     champs_partages = [
         "iban", "bic", "assurance_nom", "assurance_contrat", "assurance_couverture",
+        "statut_juridique", "forme_juridique", "capital_social",
         "adresse", "code_postal", "ville", "telephone", "email", "site_web", "logo_base64",
     ]
     for champ in champs_partages:

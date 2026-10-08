@@ -9,8 +9,8 @@ CONFIGURATION éditable par l'artisan (Batch 13 T2), distincts des compteurs
 runtime ci-dessus. `PUT /profile` verrouille devis_numero_debut/facture_numero_debut
 dès qu'un numéro légal a déjà été attribué pour ce type (cf. routers/profile.py).
 """
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Literal, Optional
 
 
 class ProfileEntreprise(BaseModel):
@@ -28,6 +28,12 @@ class ProfileEntreprise(BaseModel):
     assurance_nom: Optional[str] = None
     assurance_contrat: Optional[str] = None
     assurance_couverture: Optional[str] = None
+    # Statut juridique (Batch 21) — défaut "societe" = comportement historique
+    # inchangé (pas de mention EI). forme_juridique/capital_social : sociétés
+    # uniquement, laissés vides si auto-entrepreneur.
+    statut_juridique: Literal["societe", "auto_entrepreneur"] = "societe"
+    forme_juridique: Optional[str] = None
+    capital_social: Optional[float] = Field(None, ge=0)
     modele_prefere: str = "moderne"
     # Numérotation personnalisable par compte (Batch 13 T2) — défauts = comportement
     # historique inchangé (DEV-YYYY-NNN / FAC-YYYY-NNN à partir de 1, reset annuel).

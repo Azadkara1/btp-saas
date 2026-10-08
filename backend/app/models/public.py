@@ -26,6 +26,9 @@ class PublicArtisanInfo(BaseModel):
     assurance_nom: Optional[str] = None
     assurance_contrat: Optional[str] = None
     assurance_couverture: Optional[str] = None
+    statut_juridique: Optional[str] = None
+    forme_juridique: Optional[str] = None
+    capital_social: Optional[float] = None
 
 
 class PublicClientInfo(BaseModel):

@@ -16,6 +16,7 @@
 - **Batch 18** ✅ : CI backend cassé (import de `claude_service.py` au niveau module → `get_settings()` échoue sans secrets CI, valeurs factices ajoutées à `ci.yml`), retrait de la condition "devis signé" sur `create-acompte` (trop restrictive, jamais demandée telle quelle), `flushUpdateSave()` pour éliminer la fenêtre de course où naviguer vers Historique/Clients juste après une frappe pouvait rouvrir le document avant l'envoi du `PUT` débattu.
 - **Batch 19** ✅ : `MAX_OUTPUT_TOKENS` (génération ET import PDF/.docx) relevé de 8192/8000 à 64000 — un gros devis (chantier multi-lots) ou un document importé volumineux se terminait en erreur "trop volumineux" (réponse Claude tronquée). Les 3 appels concernés passent en streaming (`client.messages.stream()` + `get_final_message()`) car le SDK refuse un `max_tokens` aussi élevé sur une requête non-streamée. Vérifié en conditions réelles contre l'API (pas seulement mocké) : devis 8 lots/22 lignes généré sans troncature.
 - **Batch 20** ✅ : Calendrier partagé au sein d'un compte — nouvelle table `evenements` (pas de RLS, cohérent avec le reste du projet), CRUD `/evenements` filtré par `user_id`, `CalendrierView.tsx` (vues Mois/Semaine/Jour via `date-fns`, couleur déterministe par créateur, modale création/édition/suppression en bottom-sheet mobile). Suppression = DELETE physique (pas de donnée légale à tracer).
+- **Batch 21** ✅ : statut juridique (Société / Auto-entrepreneur) avec mentions légales associées (forme juridique + capital social pour une société, suffixe "(EI)" pour un auto-entrepreneur) — `ArtisanInfo`/`ProfileEntreprise`/`PublicArtisanInfo` + les 2 points d'injection + `pdf_service.py`/`word_service.py` + `QuoteForm.tsx`, migration `migration_batch21_statut_juridique.sql`, tests `test_statut_juridique.py` (6 tests, PDF+Word, 2 modèles). Calendrier (vue Mois) refait façon Google Agenda : chaque case affiche titre + 3 premiers mots de la description + nom du créateur, clic sur un événement = dépliage inline (description complète, horaire, lien "Modifier") sans ouvrir de modale. Fix : la date de fin suit désormais la date de début (même décalage en jours) dans la modale de création/édition d'événement. Étude de faisabilité d'un plafond d'usage API par utilisateur menée mais **non implémentée** — conclusions consignées ci-dessous (voir pièges). Revue de sécurité du diff (`security-review`) : aucune vulnérabilité trouvée.
 - **Étape 3 (Mobile & Vision)** — non commencée (saisie vocale, vision IA plans/photos).
 
 ---
@@ -146,13 +147,18 @@ backend/app/
 │   ├── quote.py         # Source de vérité Pydantic (NE PAS MODIFIER sans plan)
 │   ├── profile.py       # ProfileEntreprise (Lot 2) — distinct d'ArtisanInfo
 │                        #   + assurance_nom/contrat/couverture (Batch 11 T1)
+│                        #   + statut_juridique (défaut "societe", ≠ ArtisanInfo qui défaut
+│                        #     à None — cf. pièges) / forme_juridique? / capital_social? (Batch 21)
 │                        #   + devis_numero_*/facture_numero_*/numero_reset_annuel
 │                        #     (config numérotation, Batch 13 T2 — pas les compteurs runtime)
 │                        #   LigneDevis    : lot?, poste, description, quantite, unite,
 │                        #                   prix_unitaire_ht, tva_taux, source_prix
 │                        #   ArtisanInfo   : nom, siret, adresse, code_postal, ville,
 │                        #                   telephone, email, site_web, logo_base64, iban, bic,
-│                        #                   assurance_nom/contrat/couverture (Batch 11 T1)
+│                        #                   assurance_nom/contrat/couverture (Batch 11 T1),
+│                        #                   statut_juridique?/forme_juridique?/capital_social?
+│                        #                   (Batch 21 — défaut None, rétrocompatible : pas de
+│                        #                   mention ajoutée si absent, cf. pièges)
 │                        #   TotauxDevis   : total_ht, total_tva, total_ttc,
 │                        #                   remise_ht=0.0, total_ht_net=0.0, net_a_payer=0.0
 │                        #   Devis         : client, artisan, chantier, lignes, totaux,
@@ -176,6 +182,9 @@ backend/app/
 │   ├── client.py        # ClientSummary, ClientDetail, ClientUpdate
 │   ├── public.py        # PublicArtisanInfo/PublicClientInfo (whitelists), PublicDevisView,
 │   │                    #   AcceptSignatureRequest, PublicActionResponse (Batch 12 T3)
+│   │                    #   PublicArtisanInfo inclut aussi statut_juridique/forme_juridique/
+│   │                    #   capital_social (Batch 21) — non sensibles, cohérent avec les
+│   │                    #   mentions assurance déjà whitelistées
 │   ├── pdf.py            # PdfRequest — devis + signature_nom_signataire/image/date (métadonnées
 │   │                    #   document, jamais dans Devis)
 │   ├── dashboard.py     # DashboardStats, CaMoisPoint, TopPrestation
@@ -255,6 +264,10 @@ backend/app/
     │                      #   Mentions TVA calculées à l'affichage (jamais stockées) : art. 293 B,
     │                      #     taux réduit 10%/5.5% (attestation), autoliquidation — mutuellement
     │                      #     exclusives, cf. pièges
+    │                      #   Statut juridique (Batch 21) : suffixe "(EI)" après le nom si
+    │                      #     auto-entrepreneur ; ligne "forme_juridique au capital de X"
+    │                      #     si société et au moins un des deux renseigné — rien si
+    │                      #     statut_juridique absent (rétrocompatible)
     │                      #   Signature : 2 encadrés "Bon pour accord" + "Signature client"
     │                      #     — conditionnels à devis.afficher_signature (footer_h -34mm si masqué)
     │                      #     — signature électronique (nom/image/date) passée en paramètres de
@@ -299,6 +312,10 @@ frontend/src/
 │   │                    #   ② Région (select)
 │   │                    #   ③ Carte « Mon entreprise » accordéon — badge « Enregistré »
 │   │                    #     nom, SIRET, adresse, CP, ville, tel, email, site_web, logo, IBAN, BIC
+│   │                    #     Statut juridique (Batch 21) : select Société/Auto-entrepreneur ;
+│   │                    #       si Société → forme juridique (select SARL/SASU/EURL/SAS/SA/SNC/
+│   │                    #       Autre + champ libre si "Autre", état local formeJuridiqueAutre)
+│   │                    #       et capital social (nombre, €) ; champs masqués si Auto-entrepreneur
 │   │                    #     Bouton « Enregistrer le profil » → PUT /profile
 │   │                    #   ③bis « Numérotation » accordéon (Batch 13 T2) — état local
 │   │                    #     NumerotationConfig (distinct de form: QuoteRequest), point de
@@ -360,6 +377,17 @@ frontend/src/
 │                             #   création/édition/suppression en bottom-sheet mobile.
 │                             #   Suggestions de créateurs + dernier utilisé : localStorage
 │                             #   uniquement (pas d'endpoint dédié), lu en useEffect (piège SSR)
+│                             #   Vue Mois (Batch 21) : cases à hauteur automatique (plus de
+│                             #   aspect-square), jusqu'à 3 événements par jour ("+N autres"
+│                             #   sinon). Chaque événement affiche titre + 3 premiers mots de la
+│                             #   description + nom du créateur (apercuDescription()) ; clic =
+│                             #   dépliage inline (expandedEventId, pas de modale) avec description
+│                             #   complète + horaire + lien "Modifier" → ouvre EvenementModal.
+│                             #   Remplace l'ancien rendu en simples points ; cf. pièges pour le
+│                             #   compromis lisibilité/largeur retenu sur mobile
+│                             #   EvenementModal : handleDateDebutChange() décale la date de fin
+│                             #   du même nombre de jours que la date de début (sinon la fin
+│                             #   restait figée sur l'ancienne date — bug corrigé en session)
 │
 └── lib/
     ├── api.ts           # generateQuote, importQuote, exportToPdf, exportToWord (avec signature?)
@@ -379,6 +407,9 @@ frontend/src/
     ├── supabase-server.ts  # createServerClient + cookies SSR — Server Components
     └── types.ts         # Miroir EXACT des modèles Pydantic — toujours synchroniser
                          #   ProfileEntreprise : 11 champs + modele_prefere
+                         #   StatutJuridique = "societe" | "auto_entrepreneur" (Batch 21) —
+                         #     ArtisanInfo/ProfileEntreprise/PublicArtisanInfo/QuoteRequest
+                         #     portent tous statut_juridique/forme_juridique/capital_social
                          #   Devis : + modele?, afficher_signature?, type_facture?,
                          #           retenue_garantie_taux?, autoliquidation?
                          #   QuoteRequest : mêmes champs en miroir
@@ -483,6 +514,10 @@ frontend/src/
 | **Table `evenements` sans RLS — cohérent avec le reste du projet, pas un oubli** | Aucune table de ce projet (`documents`, `clients`, `entreprises`, `evenements`) n'a de policy RLS Postgres — vérifié avant le Batch 20. La sécurité repose entièrement sur le filtrage `user_id` fait manuellement dans chaque requête du client `service_role` (backend). Si une future table a besoin de RLS (ex. accès direct depuis le frontend sans passer par le backend), ce serait la première du projet — à faire consciemment, pas par réflexe. |
 | **"Partagé au sein d'un compte" = un seul `user_id`, pas du multi-utilisateur réel** | Le Calendrier (Batch 20) est partagé entre associés qui utilisent le **même compte/login** Supabase (un seul `user_id`) — `cree_par` est un champ texte libre saisi à la main, pas un lien vers un compte utilisateur distinct. Ce projet n'a pas de notion de plusieurs comptes liés à une même entreprise ; si ça devient un besoin réel, c'est un changement d'architecture (table `membres`/invitations), pas une évolution mineure de `evenements`. |
 | **Suggestions "créateurs connus" en `localStorage`, pas en base** | `CalendrierView.tsx` mémorise le dernier `cree_par` utilisé et une liste des noms déjà saisis (`calendrier_dernier_createur`/`calendrier_createurs_connus`) uniquement dans le navigateur — pas d'endpoint backend dédié. Limite assumée : les suggestions sont par appareil/navigateur, pas partagées entre les associés qui utilisent le même compte depuis des postes différents. Lu en `useEffect` uniquement, jamais dans un `useState` lazy initializer (même piège SSR que `artisan_profile`). |
+| **`ArtisanInfo.statut_juridique` défaut `None`, `ProfileEntreprise.statut_juridique` défaut `"societe"`** | Volontairement différent (Batch 21). `ArtisanInfo` est figé dans `devis_payload` (JSONB) au moment de la génération — un devis déjà généré avant ce batch n'a pas cette clé, donc Pydantic la met à `None` : aucune mention "(EI)" ni forme/capital n'apparaît rétroactivement sur un document déjà créé. `ProfileEntreprise` représente le réglage courant du compte, donc un défaut explicite `"societe"` a du sens pour tout nouveau profil. Les 2 points d'injection (`claude_service.py`/`import_service.py::_inject_artisan`) copient `ProfileEntreprise` → `ArtisanInfo` à chaque génération/import ; un devis déjà stocké ne change pas tant qu'il n'est pas régénéré. |
+| **Mention forme juridique/capital social — jamais affichée si `statut_juridique != "societe"`, même si les champs sont renseignés** | `pdf_service.py`/`word_service.py` vérifient `devis.artisan.statut_juridique == "societe"` avant de construire `forme_capital_line` — même si `forme_juridique`/`capital_social` traînent une valeur résiduelle (ex. bascule Société→Auto-entrepreneur sans vider les champs), rien ne s'affiche. Évite d'avoir à nettoyer ces 2 champs à chaque changement de statut côté frontend. |
+| **Vue Mois du calendrier : cases à hauteur automatique + dépliage inline, compromis mobile assumé** | Batch 21, remplace l'ancien rendu en points colorés. Les cases ne sont plus `aspect-square` : elles s'étirent en hauteur pour contenir jusqu'à 3 événements (`"+N autres"` sinon), chacun affichant titre + 3 premiers mots de la description + nom du créateur (`apercuDescription()`). Clic sur un événement → `expandedEventId` bascule un affichage inline (description complète, horaire, lien "Modifier") **dans la case**, sans ouvrir `EvenementModal` — `stopPropagation()` nécessaire pour ne pas aussi déclencher la sélection du jour (clic sur la case elle-même, gérée par le même pattern `onClick`/`onKeyDown` sur un `<div role="button">`, plus un `<button>`, pour permettre l'imbrication d'éléments cliquables). Sur mobile étroit (~400px), chaque case fait ~48-55 px de large — le texte reste minuscule (`text-[9-11px]`) et tronqué tant que l'événement n'est pas déplié. Choix délibéré validé avec l'utilisateur (cohérence du rendu entre tailles d'écran plutôt qu'un comportement différent desktop/mobile). |
+| **Plafond d'usage API Anthropic par utilisateur — étudié (Batch 21), non implémenté** | Demande initiale : plafonner l'usage à 10 €/mois/utilisateur. Conclusions de l'étude, à réutiliser si ce chantier démarre : (1) **Tarif réel** (`claude-sonnet-4-6`, vérifié via le skill `claude-api`) = 3 $/1M tokens input, 15 $/1M tokens output — l'output coûte 5× plus cher, donc le calcul de coût exige de connaître input et output **séparément**. (2) **Bloquant actuel** : `claude_service.py`/`import_service.py` ne renvoient que `tokens_used` = input+output **fusionnés** (`QuoteResponse.tokens_used`, jamais persisté) — ne permet pas de calculer un coût réel en euros ; il faudrait d'abord séparer les deux compteurs. (3) **Stockage** : suivre le modèle `get_next_numero` — une RPC Postgres atomique incrémentant un compteur de coût (centimes) par `user_id`, avec reset mensuel (même logique que le reset annuel de la numérotation, cf. pièges) ; jamais d'incrément côté Python (race condition, leçon déjà apprise sur ce projet). (4) **Comportement au plafond** : un simple avertissement ne plafonne rien — seul un blocage réel (HTTP 402/403 avant l'appel Claude, sur `/quotes/generate` ET `/quotes/import`) protège le coût ; mais le coût d'une requête n'est connu qu'après l'appel, donc un dépassement d'une requête reste toujours possible au moment où le plafond est franchi (compromis incontournable). (5) **Chevauchement avec Lot 5 (Stripe, backlog)** : un quota devis/mois par abonnement (Freemium/Pro) est déjà prévu — construire ce plafond en coût séparément risque de produire deux mécanismes de quota concurrents. Recommandation : traiter les deux ensemble au moment de Lot 5, pas avant. |
 
 ---
 
