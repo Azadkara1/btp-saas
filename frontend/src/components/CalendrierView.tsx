@@ -30,14 +30,6 @@ function capFirst(s: string): string {
   return s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-// 3 premiers mots de la description (aperçu dans la case du calendrier) +
-// indicateur s'il reste du texte à voir au clic.
-function apercuDescription(description: string | null | undefined, n = 3): { extrait: string; tronque: boolean } {
-  if (!description) return { extrait: "", tronque: false };
-  const mots = description.trim().split(/\s+/);
-  return { extrait: mots.slice(0, n).join(" "), tronque: mots.length > n };
-}
-
 function toDateInputValue(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -223,7 +215,7 @@ export default function CalendrierView() {
                     role="button" tabIndex={0}
                     onClick={() => setSelectedDay(day)}
                     onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setSelectedDay(day); }}
-                    className="min-h-[88px] sm:min-h-[104px] rounded-xl flex flex-col items-stretch justify-start p-1 pt-1 gap-0.5 transition-colors text-left overflow-hidden cursor-pointer"
+                    className="min-h-[104px] sm:min-h-[120px] rounded-xl flex flex-col items-stretch justify-start p-1 pt-1 gap-0.5 transition-colors text-left overflow-hidden cursor-pointer"
                     style={{
                       backgroundColor: selected ? "#E3EDE6" : "white",
                       border: isToday(day) ? "1.5px solid #14532D" : "0.5px solid rgba(20,83,45,0.1)",
@@ -233,41 +225,38 @@ export default function CalendrierView() {
                     <div className="flex flex-col gap-0.5 min-w-0">
                       {visibleEvents.map(e => {
                         const isExpanded = expandedEventId === e.id;
-                        const { extrait, tronque } = apercuDescription(e.description);
+                        const creeurColor = colorForCreateur(e.cree_par);
+                        const horaire = e.toute_la_journee
+                          ? "Toute la journée"
+                          : `De ${format(parseISO(e.date_debut), "HH:mm")} à ${format(parseISO(e.date_fin), "HH:mm")}`;
                         return (
                           <div key={e.id}
                             role="button" tabIndex={0}
                             onClick={ev => { ev.stopPropagation(); setExpandedEventId(isExpanded ? null : e.id); }}
                             onKeyDown={ev => { if (ev.key === "Enter" || ev.key === " ") { ev.stopPropagation(); setExpandedEventId(isExpanded ? null : e.id); } }}
-                            className="rounded px-1 py-0.5 min-w-0 cursor-pointer"
-                            style={{ backgroundColor: "rgba(20,83,45,0.06)" }}>
-                            <div className="flex items-center gap-1 min-w-0">
-                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: colorForCreateur(e.cree_par) }} />
-                              <span className="text-[10px] sm:text-[11px] leading-tight font-semibold truncate" style={{ color: "#18211C" }}>
-                                {e.titre}
-                              </span>
-                            </div>
-                            {!isExpanded && (extrait || e.cree_par) && (
-                              <p className="text-[9px] sm:text-[10px] leading-tight truncate pl-2.5" style={{ color: "#7C857F" }}>
-                                {extrait}{tronque ? "…" : ""}{extrait ? " · " : ""}{e.cree_par}
-                              </p>
+                            className="rounded-lg px-1.5 py-1 min-w-0 cursor-pointer"
+                            style={{ backgroundColor: creeurColor }}>
+                            <p className="text-[10px] sm:text-[11px] leading-tight font-semibold truncate text-white">
+                              {e.titre}
+                            </p>
+                            <p className="text-[9px] sm:text-[10px] leading-tight truncate" style={{ color: "rgba(255,255,255,0.85)" }}>
+                              créé par {e.cree_par}
+                            </p>
+                            <p className="text-[9px] sm:text-[10px] leading-tight truncate" style={{ color: "rgba(255,255,255,0.85)" }}>
+                              {horaire}
+                            </p>
+                            {isExpanded && e.description && (
+                              <div className="pt-1 mt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.3)" }}>
+                                <p className="text-[9px] sm:text-[10px] leading-snug whitespace-pre-wrap break-words text-white">
+                                  {e.description}
+                                </p>
+                              </div>
                             )}
                             {isExpanded && (
-                              <div className="pl-2.5 pt-0.5 space-y-0.5">
-                                {e.description && (
-                                  <p className="text-[9px] sm:text-[10px] leading-snug whitespace-pre-wrap break-words" style={{ color: "#18211C" }}>
-                                    {e.description}
-                                  </p>
-                                )}
-                                <p className="text-[9px]" style={{ color: "#7C857F" }}>
-                                  {e.toute_la_journee ? "Toute la journée" : `${format(parseISO(e.date_debut), "HH:mm")} – ${format(parseISO(e.date_fin), "HH:mm")}`}
-                                  {" · "}{e.cree_par}
-                                </p>
-                                <button type="button" onClick={ev => { ev.stopPropagation(); openEditModal(e); }}
-                                  className="text-[9px] font-medium underline" style={{ color: "#14532D" }}>
-                                  Modifier
-                                </button>
-                              </div>
+                              <button type="button" onClick={ev => { ev.stopPropagation(); openEditModal(e); }}
+                                className="text-[9px] font-medium underline text-white mt-1">
+                                Modifier
+                              </button>
                             )}
                           </div>
                         );
@@ -284,14 +273,21 @@ export default function CalendrierView() {
             </div>
           </div>
 
-          {selectedDay && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold" style={{ color: "#18211C" }}>
-                {capFirst(format(selectedDay, "EEEE d LLLL", { locale: fr }))}
-              </h3>
-              {renderEventsList(eventsForDay(selectedDay))}
-            </div>
-          )}
+          <div className="space-y-4 pt-2" style={{ borderTop: "0.5px solid rgba(20,83,45,0.1)" }}>
+            <h3 className="text-sm font-semibold" style={{ color: "#18211C" }}>Tous les événements du mois</h3>
+            {joursGrille.filter(d => isSameMonth(d, anchor) && eventsForDay(d).length > 0).length === 0 ? (
+              <p className="text-xs italic" style={{ color: "#9CA3AF" }}>Aucun événement ce mois-ci</p>
+            ) : (
+              joursGrille.filter(d => isSameMonth(d, anchor) && eventsForDay(d).length > 0).map(day => (
+                <div key={day.toISOString()} className="space-y-2">
+                  <h4 className="text-xs font-semibold" style={{ color: isToday(day) ? "#14532D" : "#5A635D" }}>
+                    {capFirst(format(day, "EEEE d LLLL", { locale: fr }))}
+                  </h4>
+                  {renderEventsList(eventsForDay(day))}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       ) : mode === "semaine" ? (
         <div className="space-y-5">

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { HardHat, RefreshCw, FileText, Receipt, Percent, Calendar, LogOut, History, Send, CheckCircle, XCircle, Clock, Copy, ArrowRightLeft, Users, LayoutDashboard, Link2, Wallet } from "lucide-react";
+import { HardHat, RefreshCw, FileText, Receipt, Percent, Calendar, LogOut, History, Send, CheckCircle, XCircle, Clock, Copy, ArrowRightLeft, Users, LayoutDashboard, Link2, Wallet, HelpCircle } from "lucide-react";
 import QuoteForm from "@/components/QuoteForm";
 import QuotePreview from "@/components/QuotePreview";
 import PdfExportButton from "@/components/PdfExportButton";
@@ -14,6 +14,7 @@ import HistoriqueView from "@/components/HistoriqueView";
 import ClientsView from "@/components/ClientsView";
 import DashboardView from "@/components/DashboardView";
 import CalendrierView from "@/components/CalendrierView";
+import NoticeView from "@/components/NoticeView";
 import SendEmailModal from "@/components/SendEmailModal";
 import { createClient } from "@/lib/supabase-client";
 import { saveDocument, updateDocument, updateDocumentStatus, convertToFacture, duplicateDocument, getSignatureLink, createAcompte, getProfile, getNumerotationStatus } from "@/lib/api";
@@ -114,7 +115,7 @@ export default function HomePage() {
   const [filenameCustomized, setFilenameCustomized] = useState(false);
   const [importedResponse, setImportedResponse]     = useState<QuoteResponse | null>(null);
   const [importArtisanChoice, setImportArtisanChoice] = useState<"keep" | "replace">("keep");
-  const [activeView, setActiveView]                 = useState<"form" | "historique" | "clients" | "dashboard" | "calendrier">("form");
+  const [activeView, setActiveView]                 = useState<"form" | "historique" | "clients" | "dashboard" | "calendrier" | "notice">("form");
   const [savedDocumentId, setSavedDocumentId]       = useState<string | null>(null);
   const [savedDocumentStatut, setSavedDocumentStatut] = useState<StatutDocument>("brouillon");
   // Signature capturée (Batch 12 T3) — métadonnée du document, pas du devis
@@ -557,6 +558,15 @@ export default function HomePage() {
                 : { border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D", backgroundColor: "white" }}>
               <Calendar className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Calendrier</span>
             </button>
+            <button
+              onClick={() => { flushUpdateSave(); setActiveView(v => v === "notice" ? "form" : "notice"); }}
+              title="Notice d'utilisation"
+              className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
+              style={activeView === "notice"
+                ? { backgroundColor: "#14532D", color: "#FFFFFF" }
+                : { border: "0.5px solid rgba(20,83,45,0.15)", color: "#5A635D", backgroundColor: "white" }}>
+              <HelpCircle className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Notice</span>
+            </button>
             <button onClick={handleLogout}
               title="Se déconnecter"
               className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 bg-white transition-colors shrink-0"
@@ -577,6 +587,8 @@ export default function HomePage() {
           <DashboardView />
         ) : activeView === "calendrier" ? (
           <CalendrierView />
+        ) : activeView === "notice" ? (
+          <NoticeView />
         ) : result ? (
           <div id="quote-result" className="space-y-4">
             <div className="flex items-start justify-between flex-wrap gap-3">
