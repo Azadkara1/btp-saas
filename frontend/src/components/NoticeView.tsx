@@ -39,8 +39,11 @@ export default function NoticeView() {
       <div className="rounded-xl px-4 py-3 text-sm flex items-start gap-2" style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}>
         <Wallet className="w-4 h-4 mt-0.5 shrink-0" />
         <span>
-          <strong>À venir :</strong> une limite d&apos;usage de 10&nbsp;€ de tokens IA par mois et par utilisateur
-          est à l&apos;étude. Elle n&apos;est pas encore active — cette notice sera mise à jour le jour de son activation.
+          <strong>À venir :</strong> une limite d&apos;usage IA par mois et par utilisateur est à l&apos;étude,
+          équivalente à 10&nbsp;€ — soit, selon le type d&apos;échange avec l&apos;IA, entre environ
+          700&nbsp;000 tokens (si c&apos;est surtout du texte généré, le plus coûteux) et 3,6&nbsp;millions
+          de tokens (si c&apos;est surtout du texte lu par l&apos;IA, le moins coûteux). Elle n&apos;est pas
+          encore active — cette notice sera mise à jour le jour de son activation.
         </span>
       </div>
 

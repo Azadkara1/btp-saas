@@ -42,7 +42,7 @@ from app.models.document import (
 )
 from app.models.quote import Devis, LigneDevis, SourcePrix, TotauxDevis
 from app.services.email_service import send_devis_email
-from app.services.numero_service import get_next_numero
+from app.services.numero_service import get_next_numero, preview_next_numero_formatted
 from app.services.pdf_service import generate_quote_pdf
 from app.services.storage_service import archive_document_pdf
 
@@ -246,6 +246,33 @@ def list_documents(current_user: CurrentUser = Depends(get_current_user)):
         except Exception:
             pass
 
+    # Batch 23 — reste dû sur les devis signés : total_ttc du devis moins la
+    # somme des factures d'acompte déjà émises pour lui (même filtre que
+    # _apply_montant_deja_verse dans convert_to_facture : n'importe quel
+    # statut hors supprimé, uniquement type_facture == "acompte"). Batché
+    # en une requête pour éviter un N+1 sur l'historique.
+    signed_devis_ids = [d["id"] for d in docs if d["type_doc"] == "devis" and d["statut"] == "signé"]
+    deja_verse_map: dict[str, float] = {}
+    if signed_devis_ids:
+        try:
+            acomptes_res = (
+                db.table("documents")
+                .select("document_source_id, total_ttc, devis_payload")
+                .in_("document_source_id", signed_devis_ids)
+                .eq("user_id", uid)
+                .eq("type_doc", "facture")
+                .is_("deleted_at", "null")
+                .execute()
+            )
+            for a in (acomptes_res.data or []):
+                if (a.get("devis_payload") or {}).get("type_facture") == "acompte":
+                    src_id = a["document_source_id"]
+                    deja_verse_map[src_id] = deja_verse_map.get(src_id, 0) + (a.get("total_ttc") or 0)
+        except Exception:
+            # Best-effort : l'historique doit rester consultable même si ce
+            # calcul d'appoint échoue — montant_restant_du reste simplement absent.
+            pass
+
     return [
         DocumentSummary(
             id=d["id"],
@@ -267,6 +294,11 @@ def list_documents(current_user: CurrentUser = Depends(get_current_user)):
             date_email_envoye=d.get("date_email_envoye"),
             email_destinataire=d.get("email_destinataire"),
             signature_nom_signataire=d.get("signature_nom_signataire"),
+            montant_restant_du=(
+                round(float(d["total_ttc"]) - deja_verse_map.get(d["id"], 0), 2)
+                if d["id"] in signed_devis_ids and d.get("total_ttc") is not None
+                else None
+            ),
         )
         for d in docs
     ]
@@ -491,23 +523,46 @@ def duplicate_document(doc_id: str, current_user: CurrentUser = Depends(get_curr
 # seule ligne de synthèse et sa propre TVA — au taux moyen pondéré du devis
 # source pour rester correct même si le devis mélange plusieurs taux de TVA.
 
-def _build_acompte_devis(devis: Devis, pourcentage: float, numero_devis_fallback: str | None) -> Devis:
+def _build_acompte_devis(
+    devis: Devis,
+    mode: str,
+    pourcentage: float | None,
+    montant_ttc_fixe: float | None,
+    numero_devis_fallback: str | None,
+    numero_document: str | None = None,
+) -> Devis:
     """Construit le Devis à une seule ligne d'une facture d'acompte.
     Fonction pure — testée directement sans base de données (même pattern que
-    `_is_signable` dans public.py)."""
+    `_is_signable` dans public.py).
+
+    Batch 23 — deux modes :
+      - "pourcentage" : % du total HT du devis (comportement historique).
+      - "montant_fixe" : montant TTC saisi directement par l'artisan — le HT
+        est recalculé à l'envers avec le taux de TVA moyen pondéré du devis
+        source, pour rester cohérent même si le devis mélange plusieurs taux.
+    `numero_document` : numéro provisoire pré-calculé par l'appelant (RPC
+    préview, best-effort) — None si le calcul a échoué, auquel cas le champ
+    reste vide comme avant Batch 23 (l'artisan peut toujours le saisir)."""
     total_ht = devis.totaux.total_ht
-    montant_ht = round(total_ht * pourcentage / 100, 2)
     tva_taux = round(devis.totaux.total_tva / total_ht * 100, 2) if total_ht > 0 else 0.0
-    montant_tva = round(montant_ht * tva_taux / 100, 2)
-    montant_ttc = round(montant_ht + montant_tva, 2)
+
+    if mode == "montant_fixe":
+        montant_ttc = round(montant_ttc_fixe, 2)
+        montant_ht = round(montant_ttc / (1 + tva_taux / 100), 2) if tva_taux else montant_ttc
+        montant_tva = round(montant_ttc - montant_ht, 2)
+        label = f"{montant_ttc:.2f} EUR TTC"
+    else:
+        montant_ht = round(total_ht * pourcentage / 100, 2)
+        montant_tva = round(montant_ht * tva_taux / 100, 2)
+        montant_ttc = round(montant_ht + montant_tva, 2)
+        label = f"{pourcentage:g} %"
 
     numero_devis = devis.numero_document or numero_devis_fallback or "en cours"
-    pct_label = f"{pourcentage:g}"
 
     return devis.model_copy(update={
         "lignes": [LigneDevis(
             poste="Acompte",
-            description=f"Acompte de {pct_label} % sur devis n° {numero_devis}",
+            description=f"Acompte de {label} sur devis n° {numero_devis}",
             quantite=1,
             unite="forfait",
             prix_unitaire_ht=montant_ht,
@@ -516,7 +571,7 @@ def _build_acompte_devis(devis: Devis, pourcentage: float, numero_devis_fallback
         )],
         "totaux": TotauxDevis(total_ht=montant_ht, total_tva=montant_tva, total_ttc=montant_ttc),
         "type_facture": "acompte",
-        "numero_document": None,
+        "numero_document": numero_document,
         "acompte": None,
         "notes": None,
     })
@@ -536,10 +591,29 @@ def create_acompte(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seul un devis peut générer une facture d'acompte")
 
     devis = Devis(**source["devis_payload"])
-    acompte_devis = _build_acompte_devis(devis, body.pourcentage, source.get("numero"))
+
+    # Numéro provisoire — best-effort (Batch 23). Même principe que
+    # computeProvisionalNumero côté frontend : une erreur ici ne doit
+    # jamais bloquer la création de la facture d'acompte, juste laisser
+    # le champ vide (l'artisan peut toujours le saisir à la main).
+    numero_provisoire: str | None = None
+    try:
+        numero_provisoire = preview_next_numero_formatted(uid, "facture")
+    except Exception as exc:
+        logger.warning("[ACOMPTE] numéro provisoire indisponible pour user %s : %s", uid, exc)
+
+    acompte_devis = _build_acompte_devis(
+        devis,
+        mode=body.mode,
+        pourcentage=body.pourcentage,
+        montant_ttc_fixe=body.montant_ttc,
+        numero_devis_fallback=source.get("numero"),
+        numero_document=numero_provisoire,
+    )
 
     titre_source = source.get("titre") or devis.client.nom or ""
-    titre = f"Facture d'acompte {body.pourcentage:g}% - {titre_source}".strip(" -")
+    titre_montant = f"{body.montant_ttc:.2f}EUR" if body.mode == "montant_fixe" else f"{body.pourcentage:g}%"
+    titre = f"Facture d'acompte {titre_montant} - {titre_source}".strip(" -")
 
     try:
         ins = db.table("documents").insert({
@@ -547,7 +621,7 @@ def create_acompte(
             "client_id": source.get("client_id"),
             "type_doc": "facture",
             "titre": titre,
-            "numero_document": None,
+            "numero_document": numero_provisoire,
             "date_document": datetime.now(timezone.utc).date().isoformat(),
             "devis_payload": acompte_devis.model_dump(),
             "total_ttc": acompte_devis.totaux.total_ttc,

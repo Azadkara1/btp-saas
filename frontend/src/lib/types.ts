@@ -231,11 +231,19 @@ export interface DocumentSummary {
   date_email_envoye?: string | null;
   email_destinataire?: string | null;
   signature_nom_signataire?: string | null;
+  montant_restant_du?: number | null;
 }
 
 export interface DocumentDetail extends DocumentSummary {
   devis_payload: Devis;
   signature_image_base64?: string | null;
+}
+
+// Batch 23 — mode "pourcentage" (historique) ou "montant_fixe" (TTC saisi directement)
+export interface CreateAcompteRequest {
+  mode: "pourcentage" | "montant_fixe";
+  pourcentage?: number;
+  montant_ttc?: number;
 }
 
 export interface StatusPatchResponse {

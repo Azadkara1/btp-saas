@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { FileText, Receipt, History, Copy, ArrowRightLeft, Trash2 } from "lucide-react";
+import { FileText, Receipt, History, Copy, ArrowRightLeft, Trash2, Search } from "lucide-react";
 import { DocumentSummary, DocumentDetail } from "@/lib/types";
 import { listDocuments, getDocument, convertToFacture, duplicateDocument, deleteDocument } from "@/lib/api";
 
@@ -35,6 +35,7 @@ export default function HistoriqueView({ onOpen }: HistoriqueViewProps) {
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"devis" | "facture">("devis");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     listDocuments()
@@ -108,7 +109,11 @@ export default function HistoriqueView({ onOpen }: HistoriqueViewProps) {
     );
   }
 
-  const docsFiltres = docs.filter(d => d.type_doc === activeTab);
+  const searchLower = search.trim().toLowerCase();
+  const docsFiltres = docs
+    .filter(d => d.type_doc === activeTab)
+    .filter(d => !searchLower || [d.titre, d.numero_document, d.numero, d.client_nom]
+      .some(v => v?.toLowerCase().includes(searchLower)));
   const nbDevis = docs.filter(d => d.type_doc === "devis").length;
   const nbFactures = docs.filter(d => d.type_doc === "facture").length;
 
@@ -129,6 +134,13 @@ export default function HistoriqueView({ onOpen }: HistoriqueViewProps) {
         ))}
       </div>
 
+      <div className="relative">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#9CA3AF" }} />
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Rechercher un document (titre, numéro, client...)"
+          className="input-field pl-9" />
+      </div>
+
       {error && (
         <div className="rounded-xl px-4 py-3 text-sm" style={{ backgroundColor: "#FEF2F2", color: "#B91C1C" }}>
           {error}
@@ -139,11 +151,15 @@ export default function HistoriqueView({ onOpen }: HistoriqueViewProps) {
         <div className="text-center py-16 space-y-3">
           <History className="w-10 h-10 mx-auto" style={{ color: "#C3CCC5" }} />
           <p className="text-sm" style={{ color: "#7C857F" }}>
-            {activeTab === "devis" ? "Aucun devis enregistré" : "Aucune facture enregistrée"}
+            {searchLower
+              ? "Aucun document ne correspond à cette recherche"
+              : activeTab === "devis" ? "Aucun devis enregistré" : "Aucune facture enregistrée"}
           </p>
-          <p className="text-xs" style={{ color: "#9CA3AF" }}>
-            Les devis et factures générés apparaîtront ici automatiquement
-          </p>
+          {!searchLower && (
+            <p className="text-xs" style={{ color: "#9CA3AF" }}>
+              Les devis et factures générés apparaîtront ici automatiquement
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
@@ -230,6 +246,11 @@ export default function HistoriqueView({ onOpen }: HistoriqueViewProps) {
                     </button>
                   </div>
                 </div>
+                {doc.montant_restant_du != null && (
+                  <p className="text-xs mt-2 pt-2" style={{ color: "#B45309", borderTop: "0.5px solid rgba(20,83,45,0.08)" }}>
+                    Reste dû : <span className="font-semibold">{fmtMoney(doc.montant_restant_du)}</span>
+                  </p>
+                )}
               </div>
             );
           })}

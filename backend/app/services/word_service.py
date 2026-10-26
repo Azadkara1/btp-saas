@@ -616,6 +616,11 @@ def generate_quote_docx(
     final_mentions_w = []
     for m in devis.mentions_legales:
         ml = m.lower()
+        # Batch 23 : même règle que pdf_service.py — toute mention contenant
+        # "devis" ou "accord" disparaît dès qu'on bascule en facture (y
+        # compris facture d'acompte).
+        if document_type != "devis" and ("devis" in ml or "accord" in ml):
+            continue
         if "valable" in ml and "jours" in ml:
             if document_type == "devis" and validite_w:
                 final_mentions_w.append(f"Devis valable {validite_w} jours a compter de la date d'emission")
@@ -719,7 +724,10 @@ def generate_quote_docx(
             pa3.runs[0].font.name = BODY_FONT
 
     # ── ZONE DE SIGNATURE ────────────────────────────────────────────
-    if devis.afficher_signature:
+    # Batch 23 : même raison que pdf_service.py — une facture n'est jamais
+    # signable via le flux électronique, donc pas d'encadré "Bon pour accord"
+    # dessus même si afficher_signature=True a été hérité du devis source.
+    if devis.afficher_signature and document_type == "devis":
         sep_sig = doc.add_paragraph()
         _zero_para_spacing(sep_sig)
 

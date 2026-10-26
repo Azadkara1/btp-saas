@@ -2,7 +2,7 @@
  * Client API — toutes les fonctions d'appel au backend FastAPI.
  * Centralisé ici pour faciliter l'ajout d'auth (Étape 2) et le mock en tests.
  */
-import { QuoteRequest, QuoteResponse, Devis, ProfileEntreprise, NumerotationStatus, DocumentCreate, DocumentSummary, DocumentDetail, StatusPatchResponse, StatutDocument, ClientSummary, ClientDetail, ClientUpdate, DashboardStats, SendEmailRequest, SendEmailResponse, PublicDevisView, SignatureLinkResponse, Evenement, EvenementCreate, EvenementUpdate } from "./types";
+import { QuoteRequest, QuoteResponse, Devis, ProfileEntreprise, NumerotationStatus, DocumentCreate, DocumentSummary, DocumentDetail, StatusPatchResponse, StatutDocument, ClientSummary, ClientDetail, ClientUpdate, DashboardStats, SendEmailRequest, SendEmailResponse, PublicDevisView, SignatureLinkResponse, Evenement, EvenementCreate, EvenementUpdate, CreateAcompteRequest } from "./types";
 import { createClient } from "./supabase-client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -148,6 +148,7 @@ export async function updateDocument(id: string, doc: DocumentCreate): Promise<D
 export async function listDocuments(): Promise<DocumentSummary[]> {
   const response = await fetch(`${API_URL}/documents`, {
     method: "GET",
+    cache: "no-store", // montant_restant_du change dès qu'un acompte est créé — jamais de cache
     headers: { ...await authHeader() },
   });
   if (!response.ok) throw new Error(`Erreur ${response.status}`);
@@ -225,11 +226,11 @@ export async function convertToFacture(id: string): Promise<DocumentDetail> {
   return response.json();
 }
 
-export async function createAcompte(id: string, pourcentage: number): Promise<DocumentDetail> {
+export async function createAcompte(id: string, body: CreateAcompteRequest): Promise<DocumentDetail> {
   const response = await fetch(`${API_URL}/documents/${id}/create-acompte`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...await authHeader() },
-    body: JSON.stringify({ pourcentage }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);

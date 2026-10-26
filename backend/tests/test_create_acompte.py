@@ -17,7 +17,9 @@ def test_build_acompte_devis_calcule_montant_et_tva_correctement():
         numero_document="DEVIS-042",
     )
 
-    acompte = _build_acompte_devis(devis, 30, numero_devis_fallback=None)
+    acompte = _build_acompte_devis(
+        devis, mode="pourcentage", pourcentage=30, montant_ttc_fixe=None, numero_devis_fallback=None,
+    )
 
     assert len(acompte.lignes) == 1
     assert acompte.lignes[0].prix_unitaire_ht == 300.0
@@ -30,6 +32,34 @@ def test_build_acompte_devis_calcule_montant_et_tva_correctement():
     assert acompte.numero_document is None
 
 
+def test_build_acompte_devis_montant_fixe_ttc_recalcule_le_ht():
+    devis = make_devis(
+        lignes=[make_ligne(prix_unitaire_ht=1000.0, tva_taux=20.0, quantite=1)],
+        numero_document="DEVIS-042",
+    )
+
+    acompte = _build_acompte_devis(
+        devis, mode="montant_fixe", pourcentage=None, montant_ttc_fixe=360.0, numero_devis_fallback=None,
+    )
+
+    assert acompte.totaux.total_ttc == 360.0
+    assert acompte.totaux.total_ht == 300.0  # 360 / 1.20
+    assert acompte.totaux.total_tva == 60.0
+    assert acompte.lignes[0].tva_taux == 20.0
+    assert "360.00" in acompte.lignes[0].description
+
+
+def test_build_acompte_devis_numero_document_provisoire_transmis():
+    devis = make_devis(lignes=[make_ligne(prix_unitaire_ht=1000.0, tva_taux=20.0)])
+
+    acompte = _build_acompte_devis(
+        devis, mode="pourcentage", pourcentage=30, montant_ttc_fixe=None,
+        numero_devis_fallback=None, numero_document="FAC-2026-005",
+    )
+
+    assert acompte.numero_document == "FAC-2026-005"
+
+
 def test_build_acompte_devis_taux_tva_moyen_pondere_si_taux_multiples():
     devis = make_devis(lignes=[
         make_ligne(prix_unitaire_ht=800.0, tva_taux=20.0, quantite=1),
@@ -40,7 +70,9 @@ def test_build_acompte_devis_taux_tva_moyen_pondere_si_taux_multiples():
         "totaux": TotauxDevis(total_ht=1000.0, total_tva=180.0, total_ttc=1180.0)
     })
 
-    acompte = _build_acompte_devis(devis, 50, numero_devis_fallback="FALLBACK-1")
+    acompte = _build_acompte_devis(
+        devis, mode="pourcentage", pourcentage=50, montant_ttc_fixe=None, numero_devis_fallback="FALLBACK-1",
+    )
 
     assert acompte.lignes[0].tva_taux == 18.0
     assert acompte.totaux.total_ht == 500.0
@@ -51,7 +83,9 @@ def test_build_acompte_devis_taux_tva_moyen_pondere_si_taux_multiples():
 def test_build_acompte_devis_utilise_fallback_numero_si_devis_sans_numero():
     devis = make_devis(numero_document=None)
 
-    acompte = _build_acompte_devis(devis, 30, numero_devis_fallback="DEV-2026-007")
+    acompte = _build_acompte_devis(
+        devis, mode="pourcentage", pourcentage=30, montant_ttc_fixe=None, numero_devis_fallback="DEV-2026-007",
+    )
 
     assert "DEV-2026-007" in acompte.lignes[0].description
 

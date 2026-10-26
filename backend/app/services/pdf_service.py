@@ -669,6 +669,12 @@ def generate_quote_pdf(
     final_mentions = []
     for m in devis.mentions_legales:
         ml = m.lower()
+        # Batch 23 : toute mention spécifique au devis (contient "devis" ou
+        # "accord" — ex. "devis valable X jours", "bon pour accord") disparaît
+        # dès qu'on bascule en facture, y compris une facture d'acompte. Une
+        # facture n'a pas les mêmes mentions légales qu'un devis.
+        if document_type != "devis" and ("devis" in ml or "accord" in ml):
+            continue
         if "valable" in ml and "jours" in ml:
             if document_type == "devis" and validite:
                 final_mentions.append(f"Devis valable {validite} jours a compter de la date d'emission")
@@ -735,7 +741,7 @@ def generate_quote_pdf(
         + (4 if (not with_tva and not devis.autoliquidation) else 0)  # art. 293 B
         + (4 + 4 + rib_lines * 4 + 4 if has_rib else 0) # RIB section
         + (4 + 4 + assurance_lines * 4 + 4 if has_assurance else 0)  # assurance pro (T1 Batch 11)
-        + (34 if devis.afficher_signature else 0)        # signature (ln6 + sig_h22 + marges)
+        + (34 if (devis.afficher_signature and document_type == "devis") else 0)  # signature (ln6 + sig_h22 + marges)
     )
     if pdf.get_y() + footer_h > pdf.h - 15:
         pdf.add_page()
@@ -790,7 +796,12 @@ def generate_quote_pdf(
             pdf.cell(0, 4, _safe(f"Couverture geographique : {devis.artisan.assurance_couverture}"), ln=True)
 
     # ── ZONE DE SIGNATURE ────────────────────────────────────────────
-    if devis.afficher_signature:
+    # Batch 23 : une facture (y compris d'acompte) n'est jamais signable via
+    # le flux de signature électronique (/signature-link refuse tout type_doc
+    # != "devis") — l'encadré "Bon pour accord" n'a donc pas lieu d'être
+    # dessiné dessus, même si afficher_signature=True a été hérité du devis
+    # source lors de la conversion/création.
+    if devis.afficher_signature and document_type == "devis":
         pdf.ln(6)
         sig_y = pdf.get_y()
         pdf.set_y(sig_y)

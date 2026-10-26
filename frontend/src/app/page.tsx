@@ -7,7 +7,7 @@ import QuotePreview from "@/components/QuotePreview";
 import PdfExportButton from "@/components/PdfExportButton";
 import WordExportButton from "@/components/WordExportButton";
 import ModelPicker from "@/components/ModelPicker";
-import { QuoteResponse, Devis, DocumentCreate, StatutDocument, SendEmailResponse, DocumentDetail } from "@/lib/types";
+import { QuoteResponse, Devis, DocumentCreate, StatutDocument, SendEmailResponse, DocumentDetail, CreateAcompteRequest } from "@/lib/types";
 import ImportButton from "@/components/ImportButton";
 import ImportReview from "@/components/ImportReview";
 import HistoriqueView from "@/components/HistoriqueView";
@@ -16,11 +16,13 @@ import DashboardView from "@/components/DashboardView";
 import CalendrierView from "@/components/CalendrierView";
 import NoticeView from "@/components/NoticeView";
 import SendEmailModal from "@/components/SendEmailModal";
+import AcompteModal from "@/components/AcompteModal";
 import { createClient } from "@/lib/supabase-client";
 import { saveDocument, updateDocument, updateDocumentStatus, convertToFacture, duplicateDocument, getSignatureLink, createAcompte, getProfile, getNumerotationStatus } from "@/lib/api";
 import { formatNumeroPreview } from "@/components/QuoteForm";
 
 type DocumentType = "devis" | "facture";
+type ActiveView = "form" | "historique" | "clients" | "dashboard" | "calendrier" | "notice";
 
 function sanitizeFilename(s: string): string {
   return s.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "_").slice(0, 80).trim() || "document";
@@ -115,7 +117,36 @@ export default function HomePage() {
   const [filenameCustomized, setFilenameCustomized] = useState(false);
   const [importedResponse, setImportedResponse]     = useState<QuoteResponse | null>(null);
   const [importArtisanChoice, setImportArtisanChoice] = useState<"keep" | "replace">("keep");
-  const [activeView, setActiveView]                 = useState<"form" | "historique" | "clients" | "dashboard" | "calendrier" | "notice">("form");
+  const [activeView, setActiveView]                 = useState<ActiveView>("form");
+  // Force un remount complet de HistoriqueView à chaque fois qu'on y entre
+  // (plutôt que de dépendre d'un unmount/remount implicite) — montant_restant_du
+  // doit refléter les factures d'acompte créées entre deux visites, jamais de cache.
+  const [historiqueKey, setHistoriqueKey]           = useState(0);
+
+  // ── Navigation interne ↔ bouton retour (navigateur/appareil) ───────
+  // Sans ça, le bouton "retour" quitte directement l'app : les onglets
+  // (Historique, Clients...) ne sont que de l'état React, le navigateur
+  // n'a aucune entrée d'historique à "dépiler" pour eux. On pousse une
+  // entrée d'historique à chaque navigation interne ; popstate (déclenché
+  // par "retour") restaure l'écran précédent au lieu de laisser le
+  // navigateur sortir de l'app. Une fois la pile interne épuisée (retour
+  // depuis l'accueil), il n'y a plus rien à intercepter : le navigateur
+  // reprend son comportement normal (quitter/revenir à la page d'avant).
+  const navigateTo = (view: ActiveView) => {
+    setActiveView(view);
+    window.history.pushState({ activeView: view }, "", window.location.href);
+  };
+
+  useEffect(() => {
+    window.history.replaceState({ activeView: "form" }, "", window.location.href);
+    const handlePopState = (e: PopStateEvent) => {
+      const view = e.state?.activeView as ActiveView | undefined;
+      if (view) setActiveView(view);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [savedDocumentId, setSavedDocumentId]       = useState<string | null>(null);
   const [savedDocumentStatut, setSavedDocumentStatut] = useState<StatutDocument>("brouillon");
   // Signature capturée (Batch 12 T3) — métadonnée du document, pas du devis
@@ -140,6 +171,7 @@ export default function HomePage() {
   const [actionLoading, setActionLoading]           = useState<"convert" | "duplicate" | "signature-link" | "acompte" | "statut" | null>(null);
   const [linkCopied, setLinkCopied]                 = useState(false);
   const [showSendModal, setShowSendModal]           = useState(false);
+  const [showAcompteModal, setShowAcompteModal]     = useState(false);
   const [sendSuccess, setSendSuccess]               = useState(false);
 
   // Recalcule le nom de fichier si non personnalisé (numero_document ou client peut avoir changé)
@@ -415,7 +447,7 @@ export default function HomePage() {
         : null
     );
     setFilenameCustomized(false);
-    setActiveView("form");
+    navigateTo("form");
     setTimeout(() => {
       document.getElementById("quote-result")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
@@ -436,27 +468,19 @@ export default function HomePage() {
     }
   };
 
-  const handleCreateAcompte = async () => {
+  const handleCreateAcompte = async (body: CreateAcompteRequest) => {
     if (!savedDocumentId) return;
-    const saisie = window.prompt("Pourcentage d'acompte à facturer (ex : 30) :", "30");
-    if (saisie === null) return;
-    const pourcentage = parseFloat(saisie.replace(",", "."));
-    if (!Number.isFinite(pourcentage) || pourcentage <= 0 || pourcentage > 100) {
-      setMarkEnvoyeError("Pourcentage invalide (doit être entre 0 et 100).");
-      setTimeout(() => setMarkEnvoyeError(null), 8000);
-      return;
-    }
     setActionLoading("acompte");
     setMarkEnvoyeError(null);
     try {
-      const created = await createAcompte(savedDocumentId, pourcentage);
+      const created = await createAcompte(savedDocumentId, body);
+      setShowAcompteModal(false);
       handleOpenFromHistory(created);
     } catch (err) {
-      setMarkEnvoyeError(err instanceof Error ? err.message : "Erreur lors de la création de la facture d'acompte");
-      setTimeout(() => setMarkEnvoyeError(null), 8000);
-    } finally {
       setActionLoading(null);
+      throw err; // laisse AcompteModal afficher l'erreur et rester ouverte
     }
+    setActionLoading(null);
   };
 
   const handleDuplicateDocument = async () => {
@@ -506,7 +530,7 @@ export default function HomePage() {
       {/* Header */}
       <header className="bg-white sticky top-0 z-10" style={{ borderBottom: "0.5px solid rgba(20,83,45,0.12)" }}>
         <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex items-center gap-2 sm:gap-3">
-          <button type="button" onClick={() => { handleReset(); setActiveView("form"); }}
+          <button type="button" onClick={() => { handleReset(); navigateTo("form"); }}
             className="flex items-center gap-2 sm:gap-3 text-left shrink-0">
             <div className="text-white p-1.5 sm:p-2 rounded-xl shrink-0" style={{ backgroundColor: "#14532D" }}>
               <HardHat className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -523,7 +547,7 @@ export default function HomePage() {
               </span>
             )}
             <button
-              onClick={() => { flushUpdateSave(); setActiveView(v => v === "historique" ? "form" : "historique"); }}
+              onClick={() => { flushUpdateSave(); setHistoriqueKey(k => k + 1); navigateTo(activeView === "historique" ? "form" : "historique"); }}
               title="Historique"
               className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "historique"
@@ -532,7 +556,7 @@ export default function HomePage() {
               <History className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Historique</span>
             </button>
             <button
-              onClick={() => { flushUpdateSave(); setActiveView(v => v === "clients" ? "form" : "clients"); }}
+              onClick={() => { flushUpdateSave(); navigateTo(activeView === "clients" ? "form" : "clients"); }}
               title="Clients"
               className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "clients"
@@ -541,7 +565,7 @@ export default function HomePage() {
               <Users className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Clients</span>
             </button>
             <button
-              onClick={() => { flushUpdateSave(); setActiveView(v => v === "dashboard" ? "form" : "dashboard"); }}
+              onClick={() => { flushUpdateSave(); navigateTo(activeView === "dashboard" ? "form" : "dashboard"); }}
               title="Dashboard"
               className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "dashboard"
@@ -550,7 +574,7 @@ export default function HomePage() {
               <LayoutDashboard className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Dashboard</span>
             </button>
             <button
-              onClick={() => { flushUpdateSave(); setActiveView(v => v === "calendrier" ? "form" : "calendrier"); }}
+              onClick={() => { flushUpdateSave(); navigateTo(activeView === "calendrier" ? "form" : "calendrier"); }}
               title="Calendrier"
               className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "calendrier"
@@ -559,7 +583,7 @@ export default function HomePage() {
               <Calendar className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Calendrier</span>
             </button>
             <button
-              onClick={() => { flushUpdateSave(); setActiveView(v => v === "notice" ? "form" : "notice"); }}
+              onClick={() => { flushUpdateSave(); navigateTo(activeView === "notice" ? "form" : "notice"); }}
               title="Notice d'utilisation"
               className="flex items-center gap-1.5 text-xs rounded-xl px-2 sm:px-3 py-2 transition-colors shrink-0"
               style={activeView === "notice"
@@ -580,7 +604,7 @@ export default function HomePage() {
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
 
         {activeView === "historique" ? (
-          <HistoriqueView onOpen={handleOpenFromHistory} />
+          <HistoriqueView key={historiqueKey} onOpen={handleOpenFromHistory} />
         ) : activeView === "clients" ? (
           <ClientsView onOpenDocument={handleOpenFromHistory} />
         ) : activeView === "dashboard" ? (
@@ -714,7 +738,7 @@ export default function HomePage() {
                 )}
                 {/* Facture d'acompte — depuis un devis, quel que soit son statut */}
                 {savedDocumentId && documentType === "devis" && (
-                  <button onClick={handleCreateAcompte} disabled={actionLoading !== null}
+                  <button onClick={() => setShowAcompteModal(true)} disabled={actionLoading !== null}
                     className="flex items-center gap-1.5 text-sm rounded-xl px-3 py-2 font-medium transition-colors disabled:opacity-50"
                     style={{ backgroundColor: "#B45309", color: "white" }}>
                     <Wallet className="w-3.5 h-3.5" /> {actionLoading === "acompte" ? "Création…" : "Facture d'acompte"}
@@ -799,6 +823,13 @@ export default function HomePage() {
           documentType={documentType}
           onClose={() => setShowSendModal(false)}
           onSent={handleEmailSent}
+        />
+      )}
+
+      {showAcompteModal && (
+        <AcompteModal
+          onClose={() => setShowAcompteModal(false)}
+          onConfirm={handleCreateAcompte}
         />
       )}
     </main>

@@ -18,6 +18,8 @@
 - **Batch 20** ✅ : Calendrier partagé au sein d'un compte — nouvelle table `evenements` (pas de RLS, cohérent avec le reste du projet), CRUD `/evenements` filtré par `user_id`, `CalendrierView.tsx` (vues Mois/Semaine/Jour via `date-fns`, couleur déterministe par créateur, modale création/édition/suppression en bottom-sheet mobile). Suppression = DELETE physique (pas de donnée légale à tracer).
 - **Batch 21** ✅ : statut juridique (Société / Auto-entrepreneur) avec mentions légales associées (forme juridique + capital social pour une société, suffixe "(EI)" pour un auto-entrepreneur) — `ArtisanInfo`/`ProfileEntreprise`/`PublicArtisanInfo` + les 2 points d'injection + `pdf_service.py`/`word_service.py` + `QuoteForm.tsx`, migration `migration_batch21_statut_juridique.sql`, tests `test_statut_juridique.py` (6 tests, PDF+Word, 2 modèles). Calendrier (vue Mois) refait façon Google Agenda : chaque case affiche titre + 3 premiers mots de la description + nom du créateur, clic sur un événement = dépliage inline (description complète, horaire, lien "Modifier") sans ouvrir de modale. Fix : la date de fin suit désormais la date de début (même décalage en jours) dans la modale de création/édition d'événement. Étude de faisabilité d'un plafond d'usage API par utilisateur menée mais **non implémentée** — conclusions consignées ci-dessous (voir pièges). Revue de sécurité du diff (`security-review`) : aucune vulnérabilité trouvée.
 - **Batch 22** ✅ : onglet "Notice d'utilisation" (`NoticeView.tsx`, sections dépliables) — explique le fonctionnement page par page, à partir du besoin décrit par l'utilisateur dans un `.docx` fourni à la racine du projet (non versionné). Mentionne le plafond de 10 €/mois en "à venir" (étudié au Batch 21, non codé). Calendrier (vue Mois) retravaillé une 2e fois sur retour utilisateur : case événement = bloc plein de la couleur du créateur (texte blanc), titre / "créé par X" / horaire chacun sur leur ligne, clic = contenu complet affiché inline ; ajout d'une liste "Tous les événements du mois" groupée par jour sous la grille (remplace l'ancien panneau du seul jour sélectionné). Recherche sur la lenteur au premier chargement en production : confirmée comme la mise en veille du plan gratuit Render (free web service, ~750 h d'instance gratuites/mois, pas un bug de code) — **aucune action prise**, un ping 24/7 consommerait la quasi-totalité du quota gratuit à lui seul ; décision du user en attente entre ne rien faire / passer le backend en instance payante Starter (~7$/mois) / ping partiel.
+- **Batch 23** ✅ : facture d'acompte — choix pourcentage ou montant fixe TTC (`AcompteModal.tsx`, remplace l'ancien `window.prompt`), numéro de facture pré-rempli automatiquement (`preview_next_numero_formatted`, best-effort), "Reste dû" affiché dans l'Historique sur un devis signé (`montant_restant_du`, batché pour éviter le N+1). Mentions légales : toute mention contenant "devis" ou "accord" disparaît désormais en mode facture (acompte inclus) — bug trouvé au passage : l'encadré visuel "Bon pour accord" lui-même s'affichait encore sur les factures, pas seulement son texte de mention (corrigé dans `pdf_service.py`/`word_service.py`, conditionné à `document_type == "devis"`). Barre de recherche (icône loupe) ajoutée dans Historique (2 onglets) et Clients. **160/160 tests.**
+- **Batch 24** ✅ : correction de 3 points remontés après test du Batch 23 — (1) `montant_restant_du` ne se rafraîchissait qu'au rechargement complet de la page : `GET /documents` n'interdisait pas la mise en cache navigateur (`cache: "no-store"` ajouté, + remount forcé de l'onglet Historique) ; (2) erreurs 500 intermittentes sur `GET /documents` : `httpcore.RemoteProtocolError: Server disconnected`, le client Supabase singleton gardait des connexions HTTP/2 en pool qui devenaient silencieusement mortes côté serveur après une période d'inactivité — fix dans `supabase_client.py` (`keepalive_expiry` court + retry automatique httpx) ; (3) bouton "retour" du navigateur/appareil qui quittait l'app au lieu de naviguer dans les onglets internes — intégration avec l'API History du navigateur (`navigateTo()` + écoute `popstate` dans `page.tsx`), ne quitte réellement l'app qu'au-delà du tout premier écran (accueil). Notice : la limite 10€/mois reformulée en ordre de grandeur de tokens (700 000 à 3,6 millions selon input/output).
 - **Étape 3 (Mobile & Vision)** — non commencée (saisie vocale, vision IA plans/photos).
 
 ---
@@ -143,6 +145,10 @@ backend/app/
 │   │                    #   HTTP 401 si token invalide/expiré, 403 si header absent
 │   ├── supabase_client.py  # Singleton get_supabase_admin() — client service_role (Lot 2)
 │   │                    #   ⚠️ Bypass RLS → filtrage user_id OBLIGATOIRE sur chaque requête
+│   │                    #   httpx_client custom (Batch 24) : keepalive_expiry=5s + retries=1
+│   │                    #     — évite les 500 intermittents "Server disconnected" (connexion
+│   │                    #     HTTP/2 du pool devenue stale après une période d'inactivité,
+│   │                    #     process long-lived) — cf. pièges
 │   └── prompts.py       # ⚠️ Prompts Claude ICI UNIQUEMENT — jamais inline dans les services
 ├── models/
 │   ├── quote.py         # Source de vérité Pydantic (NE PAS MODIFIER sans plan)
@@ -180,6 +186,10 @@ backend/app/
 │   │                    #   StatutDocument = Literal[...6 statuts...]
 │   │                    #   + document_source_id, date_envoi/signature/paiement/refus,
 │   │                    #   signature_nom_signataire, signature_image_base64 (Detail seul)
+│   │                    #   + montant_restant_du (Batch 23, DocumentSummary uniquement — None
+│   │                    #     sauf devis signé, cf. pièges)
+│   │                    #   CreateAcompteRequest (Batch 23) : mode "pourcentage"|"montant_fixe"
+│   │                    #     + pourcentage?/montant_ttc? (model_validator selon le mode)
 │   ├── client.py        # ClientSummary, ClientDetail, ClientUpdate
 │   ├── public.py        # PublicArtisanInfo/PublicClientInfo (whitelists), PublicDevisView,
 │   │                    #   AcceptSignatureRequest, PublicActionResponse (Batch 12 T3)
@@ -203,7 +213,8 @@ backend/app/
 │   │                    #   Dépend de get_current_user + get_supabase_admin
 │   │                    #   Filtrage user_id obligatoire (client service_role bypass RLS)
 │   ├── documents.py     # POST /documents (brouillon + upsert client par nom)
-│   │                    #   GET /documents (historique, batch-fetch noms clients)
+│   │                    #   GET /documents (historique, batch-fetch noms clients + Batch 23
+│   │                    #     montant_restant_du sur les devis signés, batch-fetch aussi)
 │   │                    #   GET /documents/{id} (devis_payload complet pour réouverture)
 │   │                    #   PATCH /documents/{id} (statut ; horodatage idempotent ;
 │   │                    #     brouillon→envoyé → get_next_numero)
@@ -211,7 +222,9 @@ backend/app/
 │   │                    #     détecte une facture d'acompte existante → devient facture de solde)
 │   │                    #   POST /documents/{id}/duplicate (copie conforme)
 │   │                    #   POST /documents/{id}/create-acompte (facture d'acompte séparée,
-│   │                    #     devis signé requis — fonction pure _build_acompte_devis)
+│   │                    #     fonction pure _build_acompte_devis — mode pourcentage ou
+│   │                    #     montant_fixe TTC (Batch 23), numero_document provisoire
+│   │                    #     best-effort via preview_next_numero_formatted)
 │   │                    #   DELETE /documents/{id} (soft delete deleted_at, 409 si non-brouillon/refusé)
 │   │                    #   GET /documents/{id}/signature-link (génère token à la demande)
 │   │                    #   POST /documents/{id}/send (email Resend + archivage + transition)
@@ -249,6 +262,10 @@ backend/app/
     │                      #   format_numero()/compute_next_compteur() : fonctions PURES, reflètent
     │                      #     le CASE SQL — utilisées UNIQUEMENT par preview_next_compteur()
     │                      #     (lecture seule, aperçu UI, jamais le numéro légal) — Batch 13 T2
+    │                      #   preview_next_numero_formatted() (Batch 23) : preview_next_compteur()
+    │                      #     + mise en forme (préfixe/année/padding) — utilisé par
+    │                      #     create-acompte pour pré-remplir numero_document ; appelant
+    │                      #     responsable du try/except best-effort (ne doit jamais bloquer)
     ├── dashboard_service.py  # get_dashboard_stats_raw(user_id) — appelle la RPC get_dashboard_stats
     │                      #   Normalisation défensive du retour (même pattern que numero_service.py)
     ├── email_service.py    # send_devis_email() — Resend, appel REST direct via httpx
@@ -265,12 +282,18 @@ backend/app/
     │                      #   Mentions TVA calculées à l'affichage (jamais stockées) : art. 293 B,
     │                      #     taux réduit 10%/5.5% (attestation), autoliquidation — mutuellement
     │                      #     exclusives, cf. pièges
+    │                      #   Mentions devis-only (Batch 23) : toute mention contenant "devis" ou
+    │                      #     "accord" retirée si document_type != "devis" (facture, acompte
+    │                      #     inclus) — cf. pièges
     │                      #   Statut juridique (Batch 21) : suffixe "(EI)" après le nom si
     │                      #     auto-entrepreneur ; ligne "forme_juridique au capital de X"
     │                      #     si société et au moins un des deux renseigné — rien si
     │                      #     statut_juridique absent (rétrocompatible)
     │                      #   Signature : 2 encadrés "Bon pour accord" + "Signature client"
-    │                      #     — conditionnels à devis.afficher_signature (footer_h -34mm si masqué)
+    │                      #     — conditionnels à devis.afficher_signature ET document_type == "devis"
+    │                      #       (Batch 23 : une facture n'est jamais signable électroniquement,
+    │                      #       l'encadré ne doit donc jamais s'y dessiner — cf. pièges)
+    │                      #       (footer_h -34mm si masqué)
     │                      #     — signature électronique (nom/image/date) passée en paramètres de
     │                      #       fonction séparés, jamais lue depuis Devis (cf. pièges)
     └── word_service.py    # Génération Word — python-docx, même logique que pdf_service.py
@@ -290,10 +313,18 @@ frontend/src/
 │   │                    #   withTva, documentDate, modele ("moderne"|"pro")
 │   │                    #   userEmail + handleLogout
 │   │                    #   activeView: "form"|"historique"|"clients"|"dashboard"|"calendrier"|"notice"
+│   │                    #   navigateTo(view) (Batch 24) : seule façon de changer activeView —
+│   │                    #     setActiveView() + history.pushState() pour que "retour" (navigateur/
+│   │                    #     appareil) navigue dans les onglets internes au lieu de quitter l'app ;
+│   │                    #     popstate restaure l'écran précédent (setActiveView brut, sans repush) ;
+│   │                    #     replaceState au montage pour marquer l'écran racine (accueil) — cf. pièges
+│   │                    #   historiqueKey : incrémenté à chaque clic sur l'onglet Historique → key
+│   │                    #     sur <HistoriqueView> pour forcer un remount/refetch (Batch 24)
 │   │                    #   STATUT_BADGE + STATUT_TRANSITIONS (non exportés — un export
 │   │                    #     nommé depuis un fichier page.tsx casse le typing Next.js)
 │   │                    #   handleChangeStatut(), handleConvertToFacture(),
-│   │                    #   handleDuplicateDocument(), handleCreateAcompte()
+│   │                    #   handleDuplicateDocument(), handleCreateAcompte(body) (Batch 23 : prend
+│   │                    #     CreateAcompteRequest, ouvre AcompteModal au lieu d'un window.prompt)
 │   │                    #   handleOpenFromHistory(detail: DocumentDetail) — un seul objet,
 │   │                    #     pas de params positionnels (cf. pièges)
 │   │                    #   signatureInfo state → alimente PdfExportButton/WordExportButton
@@ -363,14 +394,22 @@ frontend/src/
 │   ├── ImportReview.tsx      # Écran de validation post-import (résumé + toggle artisan)
 │   ├── PdfExportButton.tsx   # Bouton export PDF — prend un prop signature? (SignatureExportOptions)
 │   ├── WordExportButton.tsx  # Bouton export Word (.docx) — idem
+│   ├── AcompteModal.tsx      # Batch 23 — remplace l'ancien window.prompt. Toggle mode
+│   │                         #   "pourcentage" | "montant_fixe" (€ TTC), construit le
+│   │                         #   CreateAcompteRequest envoyé à POST .../create-acompte
 │   ├── HistoriqueView.tsx   # Liste des documents — onOpen: (detail: DocumentDetail) => void
 │   │                         #   Onglets Devis/Facture (Batch 14) — filtrage client-side de
 │   │                         #     GET /documents, aucun paramètre backend
 │   │                         #   Badges statut : 6 statuts. Icônes : Dupliquer, Convertir en facture,
 │   │                         #     Supprimer (tout statut depuis Batch 14, confirm renforcé si numero)
+│   │                         #   Barre de recherche (Batch 23) : filtre client-side sur titre/
+│   │                         #     numéro/client, les 2 onglets
+│   │                         #   "Reste dû" (Batch 23) affiché sous la ligne si
+│   │                         #     doc.montant_restant_du != null (devis signé uniquement)
 │   │                         #   Clic → getDocument(id) → onOpen → QuotePreview
 │   ├── ClientsView.tsx      # Liste triable (nom/CA/nb documents), fiche client éditable,
 │   │                         #   historique cliquable — onOpenDocument même callback que HistoriqueView
+│   │                         #   Barre de recherche (Batch 23) : filtre client-side sur nom/ville/CP
 │   ├── DashboardView.tsx    # KPI (StatTile) + recharts — BarChart CA/mois + PieChart statuts
 │   │                         #   (labels directs sur chaque part, cf. skill dataviz)
 │   ├── CalendrierView.tsx   # Batch 20 — vues Mois/Semaine/Jour (date-fns, locale fr), couleur
@@ -396,8 +435,11 @@ frontend/src/
 │   └── NoticeView.tsx       # Batch 22 — onglet "Notice", sections dépliables (Section locale,
 │                             #   pas le Collapsible de QuoteForm.tsx — pas exporté). Contenu
 │                             #   écrit à partir de `Notice app.docx` (racine du projet, non
-│                             #   versionné). Bandeau "à venir" pour le plafond 10€/mois — à
-│                             #   retirer/activer le jour où ce plafond sera réellement codé.
+│                             #   versionné). Bandeau "à venir" pour le plafond — exprimé en
+│                             #   tokens (Batch 24, pas en €, demande explicite de l'utilisateur) :
+│                             #   10€ ≈ 700k tokens (tout output) à 3,6M tokens (tout input), au
+│                             #   tarif claude-sonnet-4-6 ($3/$15 par 1M) — à retirer/mettre à
+│                             #   jour le jour où ce plafond sera réellement codé.
 │
 └── lib/
     ├── api.ts           # generateQuote, importQuote, exportToPdf, exportToWord (avec signature?)
@@ -407,6 +449,10 @@ frontend/src/
     │                    #   convertToFacture(id), duplicateDocument(id), createAcompte(id, pct)
     │                    #   listClients(), getClient(id), updateClient(id, upd)
     │                    #   getDashboardStats()
+    │                    #   createAcompte(id, body: CreateAcompteRequest) (Batch 23 — mode/montant)
+    │                    #   listDocuments() : cache: "no-store" (Batch 24 — sinon le navigateur
+    │                    #     pouvait resservir une réponse mise en cache, montant_restant_du
+    │                    #     restait figé jusqu'au rechargement complet de la page)
     │                    #   listEvenements(debut, fin), createEvenement, updateEvenement,
     │                    #     deleteEvenement (Batch 20)
     │                    #   getSignatureLink(id), getPublicDevis(token), acceptPublicDevis(),
@@ -427,7 +473,8 @@ frontend/src/
                          #   StatutDocument : 6 statuts
                          #   DocumentSummary/DocumentDetail : + document_source_id,
                          #     date_envoi/signature/paiement/refus, signature_nom_signataire,
-                         #     signature_image_base64 (Detail seul)
+                         #     signature_image_base64 (Detail seul), montant_restant_du? (Batch 23)
+                         #   CreateAcompteRequest (Batch 23) : mode + pourcentage?/montant_ttc?
                          #   ClientSummary, ClientDetail, ClientUpdate
                          #   DashboardStats, CaMoisPoint, TopPrestation
                          #   PublicArtisanInfo, PublicClientInfo, PublicDevisView,
@@ -529,6 +576,11 @@ frontend/src/
 | **Vue Mois du calendrier : cases à hauteur automatique + dépliage inline, retravaillée 2 fois (Batch 21 puis 22)** | Remplace l'ancien rendu en points colorés (Batch 21), puis retravaillée sur retour utilisateur (Batch 22) : chaque événement est maintenant un bloc plein de la couleur du créateur (`colorForCreateur`, texte blanc) — titre, "créé par X" et l'horaire (`"De HH:mm à HH:mm"` / `"Toute la journée"`) sur 3 lignes séparées (plus de ligne combinée, plus d'aperçu "3 premiers mots" — `apercuDescription()` a été retirée). Clic sur un événement → `expandedEventId` bascule l'affichage de la description complète + lien "Modifier" **dans la case même**, sans ouvrir `EvenementModal` — `stopPropagation()` nécessaire pour ne pas aussi déclencher la sélection du jour. Sous la grille : liste "Tous les événements du mois" groupée par jour (remplace l'ancien panneau du seul jour sélectionné — `selectedDay` ne sert plus qu'au surlignage visuel de la case). Sur mobile étroit (~400px) le texte reste petit (`text-[9-11px]`) mais chaque info a sa ligne, donc reste lisible même tronquée. |
 | **Notice d'utilisation peut devenir obsolète si une fonctionnalité change sans qu'on y repense** | `NoticeView.tsx` (Batch 22) décrit le fonctionnement réel de l'app à un instant T — ex. le bandeau "à venir" sur le plafond 10€/mois doit être retiré (et le texte mis à jour) le jour où ce plafond sera réellement codé (Lot 5). Plus généralement : toute feature qui change un flux déjà décrit dans la notice (ex. page d'accueil, document généré) devrait aussi mettre à jour `NoticeView.tsx` dans le même batch — sinon la notice ment silencieusement à l'utilisateur, comme un commentaire de code qui n'a pas suivi le code. |
 | **Plafond d'usage API Anthropic par utilisateur — étudié (Batch 21), non implémenté** | Demande initiale : plafonner l'usage à 10 €/mois/utilisateur. Conclusions de l'étude, à réutiliser si ce chantier démarre : (1) **Tarif réel** (`claude-sonnet-4-6`, vérifié via le skill `claude-api`) = 3 $/1M tokens input, 15 $/1M tokens output — l'output coûte 5× plus cher, donc le calcul de coût exige de connaître input et output **séparément**. (2) **Bloquant actuel** : `claude_service.py`/`import_service.py` ne renvoient que `tokens_used` = input+output **fusionnés** (`QuoteResponse.tokens_used`, jamais persisté) — ne permet pas de calculer un coût réel en euros ; il faudrait d'abord séparer les deux compteurs. (3) **Stockage** : suivre le modèle `get_next_numero` — une RPC Postgres atomique incrémentant un compteur de coût (centimes) par `user_id`, avec reset mensuel (même logique que le reset annuel de la numérotation, cf. pièges) ; jamais d'incrément côté Python (race condition, leçon déjà apprise sur ce projet). (4) **Comportement au plafond** : un simple avertissement ne plafonne rien — seul un blocage réel (HTTP 402/403 avant l'appel Claude, sur `/quotes/generate` ET `/quotes/import`) protège le coût ; mais le coût d'une requête n'est connu qu'après l'appel, donc un dépassement d'une requête reste toujours possible au moment où le plafond est franchi (compromis incontournable). (5) **Chevauchement avec Lot 5 (Stripe, backlog)** : un quota devis/mois par abonnement (Freemium/Pro) est déjà prévu — construire ce plafond en coût séparément risque de produire deux mécanismes de quota concurrents. Recommandation : traiter les deux ensemble au moment de Lot 5, pas avant. |
+| **Mentions légales "devis" sont filtrées par mot-clé, pas par liste figée** | Batch 23 : toute mention de `devis.mentions_legales` contenant "devis" ou "accord" (insensible à la casse) disparaît dès que `document_type != "devis"` — y compris une facture d'acompte. Avant ce correctif, seules 2 formulations précises ("valable X jours", "bon pour accord") étaient conditionnées au type de document ; une mention custom générée par Claude contenant simplement le mot "devis" fuitait telle quelle sur une facture. Implémenté dans `pdf_service.py` ET `word_service.py` (dupliqué, comme tout le reste de ces deux fichiers) — un nouveau mot-clé "spécifique devis" à exclure doit être ajouté aux DEUX. |
+| **`afficher_signature` ne suffit pas à lui seul pour décider d'afficher l'encadré de signature** | Bug trouvé au Batch 23 : l'encadré "Bon pour accord" se dessinait encore sur une facture (y compris d'acompte) dès que `devis.afficher_signature=True` avait été hérité du devis source lors d'un `convert_to_facture`/`create-acompte` (ces endpoints ne remettent jamais ce champ à `False`). Corrigé : la condition de dessin (et le calcul de `footer_h` associé dans `pdf_service.py`) exige maintenant `afficher_signature AND document_type == "devis"` — cohérent avec `/signature-link` qui refuse déjà toute signature électronique sur un document qui n'est pas un devis. Tout futur encadré/mention lié à la signature doit appliquer la même double condition. |
+| **`fetch()` côté client sans `cache: "no-store"` peut resservir une réponse périmée** | Batch 24 : `montant_restant_du` (Historique) ne se mettait à jour qu'au rechargement complet de la page (F5) — `listDocuments()` n'indiquait pas au navigateur que `GET /documents` est dynamique, qui pouvait donc être servi depuis le cache HTTP du navigateur plutôt que refait. Fix : `cache: "no-store"` sur ce fetch, + `key={historiqueKey}` incrémenté à chaque clic sur l'onglet (ceinture et bretelles — force un remount/refetch complet). Tout futur endpoint GET dont la fraîcheur compte au sein d'une même session doit suivre le même réflexe. |
+| **Bouton "retour" (navigateur/appareil) sur une SPA à état interne pur** | Batch 24 : les onglets (`activeView` dans `page.tsx`) n'existaient que dans l'état React — le navigateur n'avait aucune entrée d'historique correspondante, donc "retour" quittait directement l'app. Fix : `navigateTo(view)` appelle `history.pushState({activeView: view}, ...)` à chaque navigation interne ; un listener `popstate` restaure l'écran précédent via `setActiveView` brut (sans repush, sinon la pile se corrompt) ; `history.replaceState` au montage marque l'écran racine (accueil) sans ajouter d'entrée. Une fois la pile interne épuisée, un nouveau "retour" n'a plus rien à intercepter — le navigateur reprend naturellement son comportement par défaut (quitter l'app), exactement le comportement voulu. Toute future navigation interne ajoutée au projet (un nouvel onglet, une nouvelle modale pleine page) doit passer par `navigateTo()`, jamais `setActiveView()` directement, sous peine de recréer le même trou. |
+| **Client Supabase singleton + process long-lived = connexions HTTP/2 qui deviennent stale** | Batch 24 : 500 intermittents sur `GET /documents`, jamais reproductibles à la demande — `httpcore.RemoteProtocolError: Server disconnected`. Cause : `get_supabase_admin()` est un singleton (`@lru_cache`) dont le client httpx interne garde ses connexions HTTP/2 ouvertes en pool pendant toute la durée de vie du process (uvicorn en dev comme sur Render). Après une période d'inactivité, Supabase (ou un proxy intermédiaire) ferme la connexion silencieusement côté serveur ; httpx ne le découvre qu'en tentant de la réutiliser. Fix dans `supabase_client.py` : `httpx.Client` custom avec `limits=httpx.Limits(keepalive_expiry=5.0)` (abandonne une connexion avant qu'elle ait une chance de devenir stale) + `transport=httpx.HTTPTransport(retries=1)` (filet de sécurité). Symptôme à surveiller si ça devait réapparaître malgré tout : erreurs 500 groupées après un creux de trafic, jamais après un démarrage à froid. |
 
 ---
 

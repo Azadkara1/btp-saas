@@ -136,3 +136,38 @@ def preview_next_compteur(user_id: str, type_doc: str) -> int:
         reset_annuel=row["numero_reset_annuel"],
         annee_courante=datetime.now(timezone.utc).year,
     )
+
+
+def preview_next_numero_formatted(user_id: str, type_doc: str) -> str:
+    """Aperçu formaté (préfixe/année/padding) du prochain numéro — même
+    garde-fou que preview_next_compteur ci-dessus (lecture seule, jamais
+    d'écriture). Batch 23 : utilisé pour pré-remplir numero_document sur
+    les flux qui ne passent pas par QuoteForm/computeProvisionalNumero
+    côté frontend (ex. facture d'acompte créée depuis l'historique) —
+    l'appelant doit traiter tout échec comme best-effort (try/except),
+    jamais bloquer la création du document pour un numéro provisoire."""
+    compteur = preview_next_compteur(user_id, type_doc)
+    cols = _COLONNES_PAR_TYPE["devis" if type_doc == "devis" else "facture"]
+    db = get_supabase_admin()
+    try:
+        result = (
+            db.table("entreprises")
+            .select(f"{cols['prefixe']}, {cols['inclure_annee']}, {cols['padding']}")
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except Exception as exc:
+        logger.error("Erreur interne inattendue : %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erreur interne du serveur.")
+
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profil introuvable")
+
+    row = result.data[0]
+    return format_numero(
+        compteur=compteur,
+        prefixe=row[cols["prefixe"]],
+        inclure_annee=row[cols["inclure_annee"]],
+        padding=row[cols["padding"]],
+        annee=datetime.now(timezone.utc).year,
+    )

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Users, FileText, Receipt, ArrowLeft, Pencil, Check, X } from "lucide-react";
+import { Users, FileText, Receipt, ArrowLeft, Pencil, Check, X, Search } from "lucide-react";
 import { ClientSummary, ClientDetail, DocumentDetail } from "@/lib/types";
 import { listClients, getClient, updateClient, getDocument } from "@/lib/api";
 
@@ -35,6 +35,7 @@ export default function ClientsView({ onOpenDocument }: ClientsViewProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("nom");
+  const [search, setSearch] = useState("");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ClientDetail | null>(null);
@@ -101,11 +102,14 @@ export default function ClientsView({ onOpenDocument }: ClientsViewProps) {
     }
   };
 
-  const sortedClients = [...clients].sort((a, b) => {
-    if (sortKey === "nom") return a.nom.localeCompare(b.nom);
-    if (sortKey === "ca_total") return b.ca_total - a.ca_total;
-    return b.nb_documents - a.nb_documents;
-  });
+  const searchLower = search.trim().toLowerCase();
+  const sortedClients = [...clients]
+    .filter(c => !searchLower || [c.nom, c.ville, c.code_postal].some(v => v?.toLowerCase().includes(searchLower)))
+    .sort((a, b) => {
+      if (sortKey === "nom") return a.nom.localeCompare(b.nom);
+      if (sortKey === "ca_total") return b.ca_total - a.ca_total;
+      return b.nb_documents - a.nb_documents;
+    });
 
   if (loading) {
     return (
@@ -270,6 +274,13 @@ export default function ClientsView({ onOpenDocument }: ClientsViewProps) {
         </div>
       </div>
 
+      <div className="relative">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#9CA3AF" }} />
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Rechercher un client (nom, ville...)"
+          className="input-field pl-9" />
+      </div>
+
       {error && (
         <div className="rounded-xl px-4 py-3 text-sm" style={{ backgroundColor: "#FEF2F2", color: "#B91C1C" }}>
           {error}
@@ -279,10 +290,14 @@ export default function ClientsView({ onOpenDocument }: ClientsViewProps) {
       {sortedClients.length === 0 && !error ? (
         <div className="text-center py-16 space-y-3">
           <Users className="w-10 h-10 mx-auto" style={{ color: "#C3CCC5" }} />
-          <p className="text-sm" style={{ color: "#7C857F" }}>Aucun client enregistré</p>
-          <p className="text-xs" style={{ color: "#9CA3AF" }}>
-            Les clients des devis et factures générés apparaîtront ici automatiquement
+          <p className="text-sm" style={{ color: "#7C857F" }}>
+            {searchLower ? "Aucun client ne correspond à cette recherche" : "Aucun client enregistré"}
           </p>
+          {!searchLower && (
+            <p className="text-xs" style={{ color: "#9CA3AF" }}>
+              Les clients des devis et factures générés apparaîtront ici automatiquement
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
